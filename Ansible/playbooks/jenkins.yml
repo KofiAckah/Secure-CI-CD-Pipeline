@@ -76,6 +76,16 @@
         state: present
 
     # ==============================================
+    # Node.js (required for npm install / npm test in the pipeline)
+    # ==============================================
+    - name: Install Node.js and npm
+      dnf:
+        name:
+          - nodejs
+          - npm
+        state: present
+
+    # ==============================================
     # Docker Compose Plugin
     # ==============================================
     - name: Create Docker CLI plugins directory
