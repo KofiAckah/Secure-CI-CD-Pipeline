@@ -40,6 +40,7 @@ module "security" {
   source = "./security"
 
   vpc_id         = module.networking.vpc_id
+  vpc_cidr       = var.vpc_cidr
   ssh_allowed_ip = var.ssh_allowed_ip
   project_name   = var.project_name
   environment    = var.environment
@@ -94,7 +95,7 @@ resource "local_file" "ansible_inventory" {
 ${module.compute.jenkins_public_ip} ansible_user=ec2-user ansible_ssh_private_key_file=./${aws_key_pair.main.key_name}.pem
 
 [app_server]
-${module.compute.app_public_ip} ansible_user=ec2-user ansible_ssh_private_key_file=./${aws_key_pair.main.key_name}.pem
+${module.compute.app_public_ip} ansible_user=ec2-user ansible_ssh_private_key_file=./${aws_key_pair.main.key_name}.pem prometheus_target_ip=${module.compute.app_server_private_ip}
 
 # -------------------------------------------------------
 # Monitoring Node  (Ubuntu 24.04 LTS EC2)
@@ -110,8 +111,8 @@ app_env=${var.environment}
 # -------------------------------------------------------
 # Observability versions
 # -------------------------------------------------------
-prometheus_version=2.53.3
-node_exporter_version=1.8.2
+prometheus_version=3.9.1
+node_exporter_version=1.10.2
 EOT
   filename = "${path.module}/../Ansible/inventory.ini"
 

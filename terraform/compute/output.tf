@@ -27,3 +27,8 @@ output "monitoring_server_instance_id" {
   description = "Instance ID of the Monitoring Server"
   value       = aws_instance.monitoring_server.id
 }
+
+output "app_server_private_ip" {
+  description = "Private IP of the App Server – used by Prometheus for intra-VPC scraping"
+  value       = aws_instance.app_server.private_ip
+}

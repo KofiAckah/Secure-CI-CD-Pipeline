@@ -17,3 +17,9 @@ variable "environment" {
   description = "Deployment environment (dev, stage, prod)"
   type        = string
 }
+
+variable "vpc_cidr" {
+  description = "VPC CIDR block – used to scope monitoring scrape rules to intra-VPC traffic"
+  type        = string
+  default     = "10.0.0.0/16"
+}

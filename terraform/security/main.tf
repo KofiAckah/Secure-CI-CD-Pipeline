@@ -38,50 +38,8 @@ resource "aws_security_group" "app_sg" {
   description = "Security group for SpendWise App Server"
   vpc_id      = var.vpc_id
 
-  # SSH from your IP (for manual access)
-  ingress {
-    description = "SSH from allowed IP"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.ssh_allowed_ip]
-  }
-
-  # SSH from Jenkins server (for automated deployment)
-  ingress {
-    description     = "SSH from Jenkins Server"
-    from_port       = 22
-    to_port         = 22
-    protocol        = "tcp"
-    security_groups = [aws_security_group.jenkins_sg.id]
-  }
-
-  # Frontend - Nginx production
-  ingress {
-    description = "Frontend (HTTP)"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # Backend API
-  ingress {
-    description = "Backend API"
-    from_port   = 5000
-    to_port     = 5000
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # Frontend - Vite dev server
-  ingress {
-    description = "Frontend (Vite Dev)"
-    from_port   = 5173
-    to_port     = 5173
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  # NOTE: All ingress rules are managed as standalone aws_security_group_rule resources
+  # below to avoid Terraform conflicts when mixing inline and standalone rules.
 
   egress {
     from_port   = 0
@@ -93,6 +51,56 @@ resource "aws_security_group" "app_sg" {
   tags = {
     Name = "${var.project_name}-${var.environment}-app-sg"
   }
+}
+
+resource "aws_security_group_rule" "app_ssh_allowed" {
+  type              = "ingress"
+  description       = "SSH from allowed IP"
+  from_port         = 22
+  to_port           = 22
+  protocol          = "tcp"
+  cidr_blocks       = [var.ssh_allowed_ip]
+  security_group_id = aws_security_group.app_sg.id
+}
+
+resource "aws_security_group_rule" "app_ssh_from_jenkins" {
+  type                     = "ingress"
+  description              = "SSH from Jenkins Server"
+  from_port                = 22
+  to_port                  = 22
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.jenkins_sg.id
+  security_group_id        = aws_security_group.app_sg.id
+}
+
+resource "aws_security_group_rule" "app_http" {
+  type              = "ingress"
+  description       = "Frontend (HTTP)"
+  from_port         = 80
+  to_port           = 80
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.app_sg.id
+}
+
+resource "aws_security_group_rule" "app_backend" {
+  type              = "ingress"
+  description       = "Backend API (public access)"
+  from_port         = 5000
+  to_port           = 5000
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.app_sg.id
+}
+
+resource "aws_security_group_rule" "app_vite" {
+  type              = "ingress"
+  description       = "Frontend (Vite Dev)"
+  from_port         = 5173
+  to_port           = 5173
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.app_sg.id
 }
 
 # ==============================================
@@ -145,26 +153,38 @@ resource "aws_security_group" "monitoring_sg" {
   }
 }
 
-# Allow monitoring server to scrape Node Exporter on app servers
+# Allow Prometheus (monitoring server) to scrape Node Exporter on app servers (port 9100)
+# Uses VPC CIDR to handle both private-IP and public-IP routing within the same VPC.
 resource "aws_security_group_rule" "app_node_exporter_from_monitoring" {
-  type                     = "ingress"
-  description              = "Node Exporter scrape from Monitoring Server"
-  from_port                = 9100
-  to_port                  = 9100
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.monitoring_sg.id
-  security_group_id        = aws_security_group.app_sg.id
+  type              = "ingress"
+  description       = "Node Exporter scrape from VPC (Prometheus monitoring server)"
+  from_port         = 9100
+  to_port           = 9100
+  protocol          = "tcp"
+  cidr_blocks       = [var.vpc_cidr]
+  security_group_id = aws_security_group.app_sg.id
 }
 
-# Allow monitoring server to scrape SpendWise /metrics (port 5000)
+# Allow Prometheus to scrape SpendWise app on port 8080
+resource "aws_security_group_rule" "app_8080_from_monitoring" {
+  type              = "ingress"
+  description       = "Prometheus scrape of app port 8080 from VPC"
+  from_port         = 8080
+  to_port           = 8080
+  protocol          = "tcp"
+  cidr_blocks       = [var.vpc_cidr]
+  security_group_id = aws_security_group.app_sg.id
+}
+
+# Allow Prometheus to scrape SpendWise backend /metrics (port 5000)
 resource "aws_security_group_rule" "app_backend_metrics_from_monitoring" {
-  type                     = "ingress"
-  description              = "Prometheus scrape of /metrics from Monitoring Server"
-  from_port                = 5000
-  to_port                  = 5000
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.monitoring_sg.id
-  security_group_id        = aws_security_group.app_sg.id
+  type              = "ingress"
+  description       = "Prometheus scrape of backend /metrics from VPC"
+  from_port         = 5000
+  to_port           = 5000
+  protocol          = "tcp"
+  cidr_blocks       = [var.vpc_cidr]
+  security_group_id = aws_security_group.app_sg.id
 }
 
 # --- IAM Roles & Profiles ---

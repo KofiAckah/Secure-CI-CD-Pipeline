@@ -38,13 +38,15 @@ scrape_configs:
           service: "prometheus"
 
   # ---- SpendWise Backend API  (port 5000) -----------------
+  # Scrapes via private IP so traffic stays intra-VPC and Security Group rules match.
+  # The app must expose GET /metrics (via prometheus-client) for this to return data.
   - job_name: "spendwise_backend"
     metrics_path: /metrics
     scrape_interval: 15s
     static_configs:
       - targets:
 {% for host in groups['app_server'] %}
-          - "{{ hostvars[host]['ansible_host'] | default(host) }}:{{ app_backend_port | default(5000) }}"
+          - "{{ hostvars[host]['prometheus_target_ip'] | default(hostvars[host]['ansible_host'] | default(host)) }}:{{ app_backend_port | default(5000) }}"
 {% endfor %}
         labels:
           service: "spendwise-backend"
@@ -62,7 +64,7 @@ scrape_configs:
     static_configs:
       - targets:
 {% for host in groups['app_server'] %}
-          - "{{ hostvars[host]['ansible_host'] | default(host) }}:{{ app_frontend_port | default(8080) }}"
+          - "{{ hostvars[host]['prometheus_target_ip'] | default(hostvars[host]['ansible_host'] | default(host)) }}:{{ app_frontend_port | default(8080) }}"
 {% endfor %}
         labels:
           service: "spendwise-app"
@@ -80,7 +82,7 @@ scrape_configs:
     static_configs:
       - targets:
 {% for host in groups['app_server'] %}
-          - "{{ hostvars[host]['ansible_host'] | default(host) }}:{{ node_exporter_port | default(9100) }}"
+          - "{{ hostvars[host]['prometheus_target_ip'] | default(hostvars[host]['ansible_host'] | default(host)) }}:{{ node_exporter_port | default(9100) }}"
 {% endfor %}
         labels:
           environment: "{{ app_env | default('dev') }}"
