@@ -1,6 +1,10 @@
 # ==============================================================
 # prometheus.yml.j2  –  Prometheus scrape configuration
 # Managed by Ansible – DO NOT edit manually on the server
+#
+# Variables:
+#   app_server_ip  – private IP of the app/node-exporter host
+#                    (set in monitoring.yml vars from inventory prometheus_target_ip)
 # ==============================================================
 
 global:
@@ -37,37 +41,17 @@ scrape_configs:
         labels:
           service: "prometheus"
 
-  # ---- SpendWise Backend API  (port 5000) -----------------
-  # Scrapes via private IP so traffic stays intra-VPC and Security Group rules match.
-  # The app must expose GET /metrics (via prometheus-client) for this to return data.
+  # ---- SpendWise Node.js Application (port 5000 / /metrics) ---
+  # Uses app_server_ip (private VPC IP) so SG rules match intra-VPC traffic.
+  # Requires: prom-client library installed + /metrics route exposed in the app.
   - job_name: "spendwise_backend"
     metrics_path: /metrics
     scrape_interval: 15s
     static_configs:
       - targets:
-{% for host in groups['app_server'] %}
-          - "{{ hostvars[host]['prometheus_target_ip'] | default(hostvars[host]['ansible_host'] | default(host)) }}:{{ app_backend_port | default(5000) }}"
-{% endfor %}
+          - "{{ app_server_ip }}:{{ app_backend_port | default(5000) }}"
         labels:
           service: "spendwise-backend"
-          environment: "{{ app_env | default('dev') }}"
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        regex:        "([^:]+)(?::\\d+)?"
-        replacement:  "$1"
-
-  # ---- SpendWise App / Alternative port (8080) ------------
-  - job_name: "spendwise_app_8080"
-    metrics_path: /metrics
-    scrape_interval: 15s
-    static_configs:
-      - targets:
-{% for host in groups['app_server'] %}
-          - "{{ hostvars[host]['prometheus_target_ip'] | default(hostvars[host]['ansible_host'] | default(host)) }}:{{ app_frontend_port | default(8080) }}"
-{% endfor %}
-        labels:
-          service: "spendwise-app"
           environment: "{{ app_env | default('dev') }}"
     relabel_configs:
       - source_labels: [__address__]
@@ -81,9 +65,7 @@ scrape_configs:
     scrape_interval: 30s
     static_configs:
       - targets:
-{% for host in groups['app_server'] %}
-          - "{{ hostvars[host]['prometheus_target_ip'] | default(hostvars[host]['ansible_host'] | default(host)) }}:{{ node_exporter_port | default(9100) }}"
-{% endfor %}
+          - "{{ app_server_ip }}:{{ node_exporter_port | default(9100) }}"
         labels:
           environment: "{{ app_env | default('dev') }}"
     relabel_configs:

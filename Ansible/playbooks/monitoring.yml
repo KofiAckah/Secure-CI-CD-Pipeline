@@ -33,8 +33,10 @@
     grafana_dashboards_dir: /var/lib/grafana/dashboards
 
     # ----- scrape targets ----
+    # app_server_ip: private IP of the app/node-exporter host (intra-VPC).
+    # Pulled from inventory prometheus_target_ip (set by Terraform from compute output).
+    app_server_ip: "{{ hostvars[groups['app_server'][0]]['prometheus_target_ip'] | default(hostvars[groups['app_server'][0]]['ansible_host'] | default('')) }}"
     app_backend_port: 5000
-    app_frontend_port: 8080
     node_exporter_port: 9100
 
   handlers:
