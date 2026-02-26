@@ -10,11 +10,11 @@
 ![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?style=flat&logo=prometheus&logoColor=white)
 ![Grafana](https://img.shields.io/badge/Grafana-F46800?style=flat&logo=grafana&logoColor=white)
 
-[Features](#-key-features) • [Architecture](#-architecture) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Monitoring](#-observability-stack) • [Security](#-security-implementation)
+[Features](#key-features) • [Architecture](#architecture) • [Quick Start](#quick-start) • [Documentation](#documentation) • [Monitoring](#observability-stack) • [Security](#security-implementation)
 
 ---
 
-## 📋 Project Overview
+## Project Overview
 
 **SpendWise-Ops-Monitor** is an enterprise-grade DevOps solution demonstrating production-ready practices for deploying, monitoring, and securing a full-stack application. This project showcases complete infrastructure automation, comprehensive observability, and robust security implementations using modern cloud-native technologies.
 
@@ -29,21 +29,26 @@
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
 | **Infrastructure & Automation** | **Observability & Security** |
 |--------------------------------|------------------------------|
-| ✅ Modular Terraform (7 modules) | ✅ Prometheus metrics collection |
-| ✅ Ansible configuration management | ✅ Grafana dashboards & visualization |
-| ✅ Jenkins CI/CD (8-stage pipeline) | ✅ Node Exporter for system metrics |
-| ✅ Multi-container Docker deployment | ✅ CloudWatch Logs streaming |
-| ✅ AWS ECR integration | ✅ CloudTrail audit logging |
-| ✅ Automated testing & deployment | ✅ GuardDuty threat detection |
-| ✅ Parameter Store integration | ✅ Alert management system |
+| Modular Terraform (7 modules) | Prometheus metrics collection |
+| Ansible configuration management | Grafana dashboards & visualization |
+| Jenkins CI/CD (8-stage pipeline) | Node Exporter for system metrics |
+| Multi-container Docker deployment | CloudWatch Logs streaming |
+| AWS ECR integration | CloudTrail audit logging |
+| Automated testing & deployment | GuardDuty threat detection |
+| Parameter Store integration | Alert management system |
 
 ---
 
-## 🏗️ Architecture
+## Architecture
+
+![Architecture Diagram](assets/architecture_digram.png)
+*Architecture Diagram*
+
+
 
 ```
 ┌─────────────────────┐     ┌──────────────────────┐     ┌─────────────────────┐
@@ -87,7 +92,7 @@
 
 ---
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 ### Infrastructure as Code & Configuration Management
 - **Terraform** (v1.0+): Modular AWS infrastructure provisioning
@@ -120,21 +125,21 @@
 
 ---
 
-## 📦 Prerequisites
+## Prerequisites
 
 Before deploying this infrastructure, ensure you have:
 
-- ✅ **AWS Account** with appropriate permissions (EC2, ECR, S3, CloudWatch, IAM)
-- ✅ **AWS CLI** configured (`aws configure`)
-- ✅ **Terraform** >= 1.0 installed
-- ✅ **Ansible** >= 2.9 installed
-- ✅ **Docker** & **Docker Compose** installed locally (optional, for testing)
-- ✅ **SSH key** for EC2 access
-- ✅ Your **public IP address** (run: `curl ifconfig.me`)
+- **AWS Account** with appropriate permissions (EC2, ECR, S3, CloudWatch, IAM)
+- **AWS CLI** configured (`aws configure`)
+- **Terraform** >= 1.0 installed
+- **Ansible** >= 2.9 installed
+- **Docker** & **Docker Compose** installed locally (optional, for testing)
+- **SSH key** for EC2 access
+- **Your public IP address** (run: `curl ifconfig.me`)
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Clone the Repository
 
@@ -182,7 +187,7 @@ terraform plan -var-file=dev.tfvars
 terraform apply -var-file=dev.tfvars
 ```
 
-⏱️ **Time**: ~5-7 minutes
+**Time**: ~5-7 minutes
 
 **Expected Output:**
 ```
@@ -207,7 +212,7 @@ cd ../Ansible
 ansible-playbook playbooks/jenkins.yml
 ```
 
-⏱️ **Time**: ~3-4 minutes
+**Time**: ~3-4 minutes
 - Installs Jenkins, Docker, and required plugins
 - Sets up Docker-in-Docker for containerized builds
 
@@ -217,7 +222,7 @@ ansible-playbook playbooks/jenkins.yml
 ansible-playbook playbooks/app.yml
 ```
 
-⏱️ **Time**: ~5-6 minutes
+**Time**: ~5-6 minutes
 - Clones SpendWise-Core-App repository
 - Fetches credentials from AWS Parameter Store
 - Starts PostgreSQL, Backend, and Frontend containers
@@ -228,7 +233,7 @@ ansible-playbook playbooks/app.yml
 ansible-playbook playbooks/monitoring.yml
 ```
 
-⏱️ **Time**: ~3-4 minutes
+**Time**: ~3-4 minutes
 - Installs Prometheus and Grafana
 - Configures Node Exporter on app server
 - Sets up alert rules and dashboards
@@ -261,7 +266,7 @@ Follow the detailed guide: [JENKINS_SETUP.md](JENKINS_SETUP.md)
 
 ---
 
-## 📊 Observability Stack
+## Observability Stack
 
 ### Prometheus Metrics Collection
 
@@ -337,7 +342,7 @@ echo "Alerts: http://$MONITORING_IP:9090/alerts"
 
 ---
 
-## 🔒 Security Implementation
+## Security Implementation
 
 ### CloudWatch Logs
 
@@ -414,24 +419,24 @@ aws guardduty list-findings --detector-id <detector-id> --region eu-central-1
 
 ### Security Best Practices Implemented
 
-✅ **Network Security**:
+**Network Security**:
 - VPC isolation with custom CIDR
 - Security groups with least privilege access
 - SSH access restricted to your IP only
 - No public database exposure
 
-✅ **IAM Security**:
+**IAM Security**:
 - Separate IAM roles for Jenkins and App servers
 - Principle of least privilege
 - No hardcoded credentials
 
-✅ **Data Security**:
+**Data Security**:
 - S3 bucket encryption (AES256)
 - Private ECR repositories
 - Secrets stored in AWS Parameter Store
 - CloudTrail logs encrypted at rest
 
-✅ **Operational Security**:
+**Operational Security**:
 - Automated security updates via Ansible
 - Container health checks
 - Log retention policies
@@ -439,7 +444,7 @@ aws guardduty list-findings --detector-id <detector-id> --region eu-central-1
 
 ---
 
-## 🔄 CI/CD Pipeline
+## CI/CD Pipeline
 
 ### Jenkins 8-Stage Pipeline
 
@@ -498,7 +503,7 @@ IMAGE_TAG         = "${BUILD_NUMBER}"
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 SpendWise-Ops-Monitor/
@@ -577,7 +582,7 @@ SpendWise-Ops-Monitor/
 
 ---
 
-## 💰 Cost Analysis
+## Cost Analysis
 
 **Monthly AWS Costs (Approximate - Frankfurt Region):**
 
@@ -595,11 +600,11 @@ SpendWise-Ops-Monitor/
 | **Total Estimated Cost** | | **~$65/month** |
 
 **Cost Optimization Tips:**
-- 💡 Stop instances when not in use (reduces cost by 70%)
-- 💡 Use t3a instances instead of t3 (10% cheaper)
-- 💡 Configure S3 lifecycle policies for older logs
-- 💡 Use ECR lifecycle policies to remove old images
-- 💡 Monitor with AWS Cost Explorer and set up billing alerts
+- Stop instances when not in use (reduces cost by 70%)
+- Use t3a instances instead of t3 (10% cheaper)
+- Configure S3 lifecycle policies for older logs
+- Use ECR lifecycle policies to remove old images
+- Monitor with AWS Cost Explorer and set up billing alerts
 
 **Development Environment Cost:**
 ```bash
@@ -612,7 +617,7 @@ aws ec2 start-instances --instance-ids <jenkins-id> <app-id> <monitoring-id>
 
 ---
 
-## 🛠️ Troubleshooting
+## Troubleshooting
 
 ### Common Issues & Solutions
 
@@ -757,7 +762,7 @@ curl http://admin:admin@<monitoring-ip>:3000/api/health
 
 ---
 
-## 📈 Performance Metrics
+## Performance Metrics
 
 ### Application Performance
 
@@ -790,7 +795,7 @@ curl http://admin:admin@<monitoring-ip>:3000/api/health
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 ### Additional Guides
 
@@ -820,7 +825,7 @@ curl http://<app-ip>:5000/metrics | grep http_requests_total
 
 ---
 
-## 🔐 Security Notes
+## Security Notes
 
 ### Before Production Deployment
 
@@ -837,15 +842,15 @@ curl http://<app-ip>:5000/metrics | grep http_requests_total
 
 The `.gitignore` already excludes these, but be vigilant:
 
-- ❌ `*.pem` - SSH private keys
-- ❌ `*.tfvars` (except example.tfvars) - Contains secrets
-- ❌ `terraform.tfstate*` - May contain sensitive data
-- ❌ `inventory.ini` - Contains IPs and paths
-- ❌ `.env` files - Environment secrets
+- `*.pem` - SSH private keys
+- `*.tfvars` (except example.tfvars) - Contains secrets
+- `terraform.tfstate*` - May contain sensitive data
+- `inventory.ini` - Contains IPs and paths
+- `.env` files - Environment secrets
 
 ---
 
-## 🧹 Cleanup
+## Cleanup
 
 To destroy all resources and avoid ongoing charges:
 
