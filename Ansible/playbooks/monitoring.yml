@@ -23,8 +23,8 @@
 
   vars:
     # ----- binary versions (override in inventory or via -e) -----
-    prometheus_version: "{{ hostvars[inventory_hostname]['prometheus_version'] | default('2.53.3') }}"
-    node_exporter_version: "{{ hostvars[inventory_hostname]['node_exporter_version'] | default('1.8.2') }}"
+    prometheus_version: "{{ hostvars[inventory_hostname]['prometheus_version'] | default('3.9.1') }}"
+    node_exporter_version: "{{ hostvars[inventory_hostname]['node_exporter_version'] | default('1.10.2') }}"
 
     # ----- directories ----
     prometheus_config_dir: /etc/prometheus
@@ -107,7 +107,12 @@
         url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
         dest: "/tmp/prometheus-{{ prometheus_version }}.tar.gz"
         mode: '0644'
+        timeout: 120
         # checksum can be pinned per release; left flexible here
+      register: prometheus_download
+      retries: 5
+      delay: 15
+      until: prometheus_download is succeeded
       tags: [prometheus]
 
     - name: Extract Prometheus archive
@@ -132,6 +137,12 @@
       notify: Restart Prometheus
       tags: [prometheus]
 
+    - name: Check if Prometheus console libraries exist (removed in Prometheus 3.x)
+      stat:
+        path: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64/consoles"
+      register: prometheus_consoles_stat
+      tags: [prometheus]
+
     - name: Copy Prometheus console libraries and templates
       copy:
         src: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64/{{ item }}"
@@ -142,6 +153,7 @@
       loop:
         - consoles
         - console_libraries
+      when: prometheus_consoles_stat.stat.exists
       tags: [prometheus]
 
     # ----------------------------------------------------------
@@ -318,7 +330,7 @@
   gather_facts: yes
 
   vars:
-    node_exporter_version: "{{ hostvars[inventory_hostname]['node_exporter_version'] | default('1.8.2') }}"
+    node_exporter_version: "{{ hostvars[inventory_hostname]['node_exporter_version'] | default('1.10.2') }}"
     node_exporter_user: node_exporter
     node_exporter_port: 9100
 
@@ -351,6 +363,11 @@
         url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
         dest: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
         mode: '0644'
+        timeout: 120
+      register: node_exporter_download
+      retries: 5
+      delay: 15
+      until: node_exporter_download is succeeded
       tags: [node_exporter]
 
     - name: Extract Node Exporter archive

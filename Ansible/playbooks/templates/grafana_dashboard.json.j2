@@ -53,14 +53,14 @@
       {
         "current": {},
         "datasource": {"type": "prometheus", "uid": "spendwise-prometheus"},
-        "definition": "label_values(up{job=~\"spendwise_.*\"}, instance)",
+        "definition": "label_values(up{job=~\"spendwise_.*|node_exporter\"}, instance)",
         "hide": 0,
         "includeAll": true,
         "multi": true,
         "name": "instance",
         "options": [],
         "query": {
-          "query": "label_values(up{job=~\"spendwise_.*\"}, instance)",
+          "query": "label_values(up{job=~\"spendwise_.*|node_exporter\"}, instance)",
           "refId": "StandardVariableQuery"
         },
         "refresh": 2,
