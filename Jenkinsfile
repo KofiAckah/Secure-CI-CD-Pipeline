@@ -222,34 +222,33 @@ pipeline {
         stage('Generate SBOM - Syft') {
             steps {
                 echo '=== Generating Software Bill of Materials ==='
-                sh """
+                    sh """
                     echo "--- Generating SBOM for backend image ---"
                     docker run --rm \
-                        -v /var/run/docker.sock:/var/run/docker.sock \
-                        -v ${WORKSPACE}/${REPORTS_DIR}:/output \
-                        anchore/syft:latest \
-                        ${BACKEND_ECR_REPO}:${IMAGE_TAG} \
-                        -o cyclonedx-json \
-                        --file /output/sbom-backend.json
+                    -v /var/run/docker.sock:/var/run/docker.sock \
+                    -v ${WORKSPACE}/security-reports:/output \
+                    anchore/syft:latest \
+                    docker:${BACKEND_ECR_REPO}:${IMAGE_TAG} \
+                    -o cyclonedx-json=/output/sbom-backend.json
 
-                    echo "--- Generating SBOM for frontend image ---"
-                    docker run --rm \
-                        -v /var/run/docker.sock:/var/run/docker.sock \
-                        -v ${WORKSPACE}/${REPORTS_DIR}:/output \
-                        anchore/syft:latest \
-                        ${FRONTEND_ECR_REPO}:${IMAGE_TAG} \
-                        -o cyclonedx-json \
-                        --file /output/sbom-frontend.json
-                """
-                echo '✅ SBOM generated'
-            }
-            post {
-                always {
-                    archiveArtifacts artifacts: 'security-reports/sbom-*.json',
-                                     allowEmptyArchive: true
-                }
-            }
+                echo "--- Generating SBOM for frontend image ---"
+                docker run --rm \
+                    -v /var/run/docker.sock:/var/run/docker.sock \
+                    -v ${WORKSPACE}/security-reports:/output \
+                    anchore/syft:latest \
+                    docker:${FRONTEND_ECR_REPO}:${IMAGE_TAG} \
+                    -o cyclonedx-json=/output/sbom-frontend.json
+            """
+            echo '✅ SBOM generated'
+    }
+    post {
+        always {
+            archiveArtifacts artifacts: 'security-reports/sbom-*.json',
+                             allowEmptyArchive: true
         }
+    }
+}
+
 
         // ============================================================
         // Stage 9: Push Images to AWS ECR
