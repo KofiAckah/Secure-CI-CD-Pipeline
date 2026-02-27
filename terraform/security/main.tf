@@ -325,6 +325,50 @@ resource "aws_iam_role_policy" "jenkins_ssm_read" {
     ]
   })
 }
+
+# ECS permissions for Jenkins Server to deploy Fargate services
+resource "aws_iam_role_policy" "jenkins_ecs_deploy" {
+  name = "${var.project_name}-${var.environment}-jenkins-ecs-deploy"
+  role = aws_iam_role.jenkins_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecs:DescribeTaskDefinition",
+          "ecs:RegisterTaskDefinition",
+          "ecs:DeregisterTaskDefinition",
+          "ecs:DescribeServices",
+          "ecs:UpdateService",
+          "ecs:DescribeTasks",
+          "ecs:ListTasks",
+          "ecs:ListTaskDefinitions",
+          "ecs:DescribeClusters",
+          "ecs:ListClusters"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "iam:PassRole"
+        ]
+        Resource = [
+          "arn:aws:iam::*:role/${var.project_name}-${var.environment}-ecs-execution-role",
+          "arn:aws:iam::*:role/${var.project_name}-${var.environment}-ecs-task-role"
+        ]
+        Condition = {
+          StringEquals = {
+            "iam:PassedToService" = "ecs-tasks.amazonaws.com"
+          }
+        }
+      }
+    ]
+  })
+}
+
 # CloudWatch Logs permissions for App Server (Docker awslogs driver)
 resource "aws_iam_role_policy" "app_cloudwatch_logs" {
   name = "${var.project_name}-${var.environment}-app-cloudwatch-logs"

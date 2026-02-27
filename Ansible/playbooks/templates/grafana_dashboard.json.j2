@@ -160,7 +160,7 @@
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "spendwise-prometheus"},
-          "expr": "sum(rate(http_requests_total{http_status=~\"5..\",instance=~\"$instance\"}[5m])) / sum(rate(http_requests_total{instance=~\"$instance\"}[5m]))",
+          "expr": "(sum(rate(http_requests_total{status_code=~\"5..\",instance=~\"$instance\"}[5m])) / sum(rate(http_requests_total{instance=~\"$instance\"}[5m]))) or vector(0)",
           "legendFormat": "Error Rate",
           "refId": "A"
         }
@@ -297,8 +297,8 @@
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "spendwise-prometheus"},
-          "expr": "sum(rate(http_requests_total{instance=~\"$instance\"}[5m])) by (http_status)",
-          "legendFormat": "HTTP {{http_status}}",
+          "expr": "sum(rate(http_requests_total{instance=~\"$instance\"}[5m])) by (status_code)",
+          "legendFormat": "HTTP {{status_code}}",
           "refId": "A"
         },
         {
@@ -360,13 +360,13 @@
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "spendwise-prometheus"},
-          "expr": "sum(rate(http_requests_total{http_status=~\"5..\",instance=~\"$instance\"}[5m])) by (instance) / sum(rate(http_requests_total{instance=~\"$instance\"}[5m])) by (instance)",
+          "expr": "(sum(rate(http_requests_total{status_code=~\"5..\",instance=~\"$instance\"}[5m])) by (instance) / sum(rate(http_requests_total{instance=~\"$instance\"}[5m])) by (instance)) or vector(0)",
           "legendFormat": "5xx Error Rate – {{instance}}",
           "refId": "A"
         },
         {
           "datasource": {"type": "prometheus", "uid": "spendwise-prometheus"},
-          "expr": "sum(rate(http_requests_total{http_status=~\"4..\",instance=~\"$instance\"}[5m])) by (instance) / sum(rate(http_requests_total{instance=~\"$instance\"}[5m])) by (instance)",
+          "expr": "(sum(rate(http_requests_total{status_code=~\"4..\",instance=~\"$instance\"}[5m])) by (instance) / sum(rate(http_requests_total{instance=~\"$instance\"}[5m])) by (instance)) or vector(0)",
           "legendFormat": "4xx Error Rate – {{instance}}",
           "refId": "B"
         }

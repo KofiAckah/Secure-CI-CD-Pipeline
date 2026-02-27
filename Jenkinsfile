@@ -159,7 +159,7 @@ pipeline {
         stage('Build Docker Images') {
             steps {
                 echo '=== Building Docker images ==='
-                sh """
+                sh '''
                     echo "--- Building backend image (tag: ${IMAGE_TAG}) ---"
                     docker build \
                         -t ${BACKEND_ECR_REPO}:${IMAGE_TAG} \
@@ -173,7 +173,7 @@ pipeline {
                         SpendWise-Core-App/frontend
 
                     echo "✅ Both images built successfully (build #${IMAGE_TAG})"
-                """
+                '''
             }
         }
 
@@ -183,7 +183,7 @@ pipeline {
         stage('Image Scan - Trivy') {
             steps {
                 echo '=== Scanning Docker images for vulnerabilities ==='
-                sh """
+                sh '''
                     echo "--- Scanning backend image ---"
                     docker run --rm \
                         -v /var/run/docker.sock:/var/run/docker.sock \
@@ -205,7 +205,7 @@ pipeline {
                         --format json \
                         --output /reports/trivy-frontend-report.json \
                         ${FRONTEND_ECR_REPO}:${IMAGE_TAG} || true
-                """
+                '''
                 echo '✅ Image scan complete'
             }
             post {
@@ -222,7 +222,7 @@ pipeline {
         stage('Generate SBOM - Syft') {
             steps {
                 echo '=== Generating Software Bill of Materials ==='
-                    sh """
+                    sh '''
                     echo "--- Generating SBOM for backend image ---"
                     docker run --rm \
                     -v /var/run/docker.sock:/var/run/docker.sock \
@@ -238,7 +238,7 @@ pipeline {
                     anchore/syft:latest \
                     docker:${FRONTEND_ECR_REPO}:${IMAGE_TAG} \
                     -o cyclonedx-json=/output/sbom-frontend.json
-            """
+            '''
             echo '✅ SBOM generated'
     }
     post {
@@ -256,7 +256,7 @@ pipeline {
         stage('Push to ECR') {
             steps {
                 echo '=== Authenticating with AWS ECR and pushing images ==='
-                sh """
+                sh '''
                     aws ecr get-login-password --region ${AWS_REGION} | \
                         docker login --username AWS --password-stdin ${ECR_REGISTRY}
 
@@ -269,7 +269,7 @@ pipeline {
                     docker push ${FRONTEND_ECR_REPO}:latest
 
                     echo "✅ All images pushed to ECR"
-                """
+                '''
             }
         }
 
@@ -280,7 +280,7 @@ pipeline {
             steps {
                 echo '=== Deploying to ECS Fargate ==='
                 script {
-                    sh """
+                    sh '''
                         echo "--- Fetching current task definition ---"
                         aws ecs describe-task-definition \
                             --task-definition ${TASK_FAMILY} \
@@ -313,27 +313,27 @@ print('Task definition updated successfully')
 "
 
                         echo "--- Registering new task definition revision ---"
-                        NEW_REVISION=\$(aws ecs register-task-definition \
+                        NEW_REVISION=$(aws ecs register-task-definition \
                             --region ${AWS_REGION} \
                             --cli-input-json file://new-task-def.json \
                             --query 'taskDefinition.revision' \
                             --output text)
 
-                        echo "Registered revision: \$NEW_REVISION"
+                        echo "Registered revision: $NEW_REVISION"
 
                         echo "--- Updating ECS service ---"
                         aws ecs update-service \
                             --region ${AWS_REGION} \
                             --cluster ${ECS_CLUSTER} \
                             --service ${ECS_SERVICE} \
-                            --task-definition ${TASK_FAMILY}:\$NEW_REVISION \
+                            --task-definition ${TASK_FAMILY}:$NEW_REVISION \
                             --force-new-deployment
 
                         echo "--- Saving task definition as artifact ---"
                         cp new-task-def.json ${REPORTS_DIR}/task-definition-rendered.json
 
-                        echo "✅ ECS service updated to revision \$NEW_REVISION"
-                    """
+                        echo "✅ ECS service updated to revision $NEW_REVISION"
+                    '''
                 }
             }
             post {
@@ -351,7 +351,7 @@ print('Task definition updated successfully')
             steps {
                 echo '=== Waiting for ECS service to stabilize ==='
                 script {
-                    sh """
+                    sh '''
                         echo "--- Waiting for service to reach steady state ---"
                         aws ecs wait services-stable \
                             --region ${AWS_REGION} \
@@ -367,7 +367,7 @@ print('Task definition updated successfully')
                             --output table
 
                         echo "✅ ECS deployment verified"
-                    """
+                    '''
                 }
             }
         }
@@ -378,17 +378,17 @@ print('Task definition updated successfully')
         stage('Cleanup Old Images') {
             steps {
                 echo '=== Cleaning up old Docker images (keeping last 3 builds) ==='
-                sh """
+                sh '''
                     docker images ${BACKEND_ECR_REPO} --format '{{.Tag}}' | \
-                        grep -E '^[0-9]+\$' | sort -rn | tail -n +4 | \
+                        grep -E '^[0-9]+$' | sort -rn | tail -n +4 | \
                         xargs -r -I{} docker rmi ${BACKEND_ECR_REPO}:{} || true
 
                     docker images ${FRONTEND_ECR_REPO} --format '{{.Tag}}' | \
-                        grep -E '^[0-9]+\$' | sort -rn | tail -n +4 | \
+                        grep -E '^[0-9]+$' | sort -rn | tail -n +4 | \
                         xargs -r -I{} docker rmi ${FRONTEND_ECR_REPO}:{} || true
 
                     echo "✅ Cleanup complete"
-                """
+                '''
             }
         }
     }

@@ -32,6 +32,16 @@ resource "aws_instance" "jenkins_server" {
   vpc_security_group_ids = [var.jenkins_sg_id]
   iam_instance_profile   = var.jenkins_instance_profile
 
+  root_block_device {
+    volume_size           = 25    # GB – accommodate CodeQL databases and build artifacts
+    volume_type           = "gp3"
+    delete_on_termination = true
+
+    tags = {
+      Name = "${var.project_name}-${var.environment}-jenkins-root"
+    }
+  }
+
   tags = {
     Name = "${var.project_name}-${var.environment}-jenkins-server"
   }

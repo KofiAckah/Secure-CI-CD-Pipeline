@@ -291,6 +291,118 @@
       tags: [grafana, dashboard]
 
     # ----------------------------------------------------------
+    # Grafana – Alerting Configuration
+    # ----------------------------------------------------------
+    - name: Create Grafana alerting provisioning directory
+      file:
+        path: /etc/grafana/provisioning/alerting
+        state: directory
+        owner: grafana
+        group: grafana
+        mode: '0755'
+      tags: [grafana, alerting]
+
+    - name: Deploy Grafana alerting contact points and notification policies
+      template:
+        src: grafana_alerting.yml.j2
+        dest: /etc/grafana/provisioning/alerting/contactpoints.yml
+        owner: grafana
+        group: grafana
+        mode: '0644'
+      notify: Restart Grafana
+      tags: [grafana, alerting]
+
+    - name: Deploy Grafana alert rules
+      template:
+        src: grafana_alert_rules.yml.j2
+        dest: /etc/grafana/provisioning/alerting/rules.yml
+        owner: grafana
+        group: grafana
+        mode: '0644'
+      notify: Restart Grafana
+      tags: [grafana, alerting]
+
+    - name: Enable unified alerting in Grafana
+      lineinfile:
+        path: /etc/grafana/grafana.ini
+        regexp: '^#?unified_alerting_enabled\s*='
+        line: 'unified_alerting_enabled = true'
+        insertafter: '^\[alerting\]'
+        state: present
+      notify: Restart Grafana
+      tags: [grafana, alerting]
+
+    - name: Configure Grafana SMTP - enabled
+      lineinfile:
+        path: /etc/grafana/grafana.ini
+        regexp: '^[#;]?\s*enabled\s*='
+        line: 'enabled = true'
+        insertafter: '^\[smtp\]'
+        state: present
+      notify: Restart Grafana
+      tags: [grafana, smtp]
+
+    - name: Configure Grafana SMTP - host
+      lineinfile:
+        path: /etc/grafana/grafana.ini
+        regexp: '^[#;]?\s*host\s*='
+        line: 'host = smtp.gmail.com:587'
+        insertafter: '^\[smtp\]'
+        state: present
+      notify: Restart Grafana
+      tags: [grafana, smtp]
+
+    - name: Configure Grafana SMTP - user
+      lineinfile:
+        path: /etc/grafana/grafana.ini
+        regexp: '^[#;]?\s*user\s*='
+        line: 'user = livingstonelee360@gmail.com'
+        insertafter: '^\[smtp\]'
+        state: present
+      notify: Restart Grafana
+      tags: [grafana, smtp]
+
+    - name: Configure Grafana SMTP - password
+      lineinfile:
+        path: /etc/grafana/grafana.ini
+        regexp: '^[#;]?\s*password\s*='
+        line: 'password = {{ grafana_smtp_password }}'
+        insertafter: '^\[smtp\]'
+        state: present
+      notify: Restart Grafana
+      tags: [grafana, smtp]
+
+    - name: Configure Grafana SMTP - from_address
+      lineinfile:
+        path: /etc/grafana/grafana.ini
+        regexp: '^[#;]?\s*from_address\s*='
+        line: 'from_address = livingstonelee360@gmail.com'
+        insertafter: '^\[smtp\]'
+        state: present
+      notify: Restart Grafana
+      tags: [grafana, smtp]
+
+    - name: Configure Grafana SMTP - from_name
+      lineinfile:
+        path: /etc/grafana/grafana.ini
+        regexp: '^[#;]?\s*from_name\s*='
+        line: 'from_name = SpendWise Grafana Alerts'
+        insertafter: '^\[smtp\]'
+        state: present
+      notify: Restart Grafana
+      tags: [grafana, smtp]
+
+    - name: Configure Grafana SMTP - startTLS_policy
+      lineinfile:
+        path: /etc/grafana/grafana.ini
+        regexp: '^[#;]?\s*startTLS_policy\s*='
+        line: 'startTLS_policy = MandatoryStartTLS'
+        insertafter: '^\[smtp\]'
+        state: present
+      notify: Restart Grafana
+      tags: [grafana, smtp]
+
+    # ----------------------------------------------------------
     # Grafana – systemd service
     # ----------------------------------------------------------
     - name: Enable and start Grafana service
