@@ -198,6 +198,13 @@ resource "aws_ecs_task_definition" "app" {
       name      = "spendwise-backend"
       image     = "${var.backend_image}:${var.image_tag}"
       essential = true
+
+      # Reserve explicit CPU + memory so ECS cannot OOM-kill the backend
+      # when the frontend container spikes. Task total = 1024 CPU / 2048 MB.
+      cpu               = 512
+      memory            = 1024
+      memoryReservation = 512
+
       portMappings = [
         {
           containerPort = 5000
@@ -217,16 +224,17 @@ resource "aws_ecs_task_definition" "app" {
         {
           name  = "DB_PORT"
           value = "5432"
-        },
-        {
-          name  = "DB_NAME"
-          value = var.db_name
         }
       ]
       secrets = [
         {
           name      = "DB_HOST"
           valueFrom = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/${var.project_name}/${var.environment}/app/db_host"
+        },
+        {
+          # app code reads DB_NAME; SSM path /...db/name matches parameters module
+          name      = "DB_NAME"
+          valueFrom = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/${var.project_name}/${var.environment}/db/name"
         },
         {
           name      = "DB_USER"
@@ -245,8 +253,9 @@ resource "aws_ecs_task_definition" "app" {
           "awslogs-stream-prefix" = "backend"
         }
       }
+      # FIX: app.get('/health', ...) — NOT /api/health. Wrong path → 404 → ECS kills backend
       healthCheck = {
-        command     = ["CMD-SHELL", "curl -f http://localhost:5000/api/health || exit 1"]
+        command     = ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
         interval    = 30
         timeout     = 10
         retries     = 5
@@ -257,6 +266,12 @@ resource "aws_ecs_task_definition" "app" {
       name      = "spendwise-frontend"
       image     = "${var.frontend_image}:${var.image_tag}"
       essential = true
+
+      # Nginx is lightweight — reserve 256 MB, leave headroom for backend
+      cpu               = 256
+      memory            = 512
+      memoryReservation = 256
+
       portMappings = [
         {
           containerPort = 80
@@ -272,12 +287,16 @@ resource "aws_ecs_task_definition" "app" {
           "awslogs-stream-prefix" = "frontend"
         }
       }
-      dependsOn = [
-        {
-          containerName = "spendwise-backend"
-          condition     = "START"
-        }
-      ]
+      healthCheck = {
+        command     = ["CMD-SHELL", "curl -f http://localhost:80/ || exit 1"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 30
+      }
+      # dependsOn intentionally removed: START condition caused cascade restarts.
+      # Nginx starts independently; browser gets a brief 502 until backend is ready,
+      # then recovers automatically — no container restart loop.
     }
   ])
 
@@ -298,6 +317,9 @@ resource "aws_ecs_service" "app" {
   task_definition = aws_ecs_task_definition.app.arn
   desired_count   = 1
   launch_type     = "FARGATE"
+
+  # Give containers 120 s to pass health checks before ECS marks the deployment failed
+  health_check_grace_period_seconds = 120
 
   network_configuration {
     subnets          = var.public_subnet_ids

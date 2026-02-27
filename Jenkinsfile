@@ -404,14 +404,13 @@ print('Task definition updated successfully')
         stage('Verify ECS Deployment') {
             steps {
                 echo '=== Waiting for ECS service to stabilize ==='
-                timeout(time: 2.5, unit: 'MINUTES') {
+                // 2 minutes max — 8 attempts × 15s = 120s
+                timeout(time: 2, unit: 'MINUTES') {
                     script {
                         sh '''
                             echo "--- Waiting for service to reach steady state ---"
-                            # Poll every 15s for up to 5 minutes (20 attempts).
-                            # Uses JMESPath --query to extract values directly from the
-                            # AWS CLI — no Python json parsing or quoting issues.
-                            for i in $(seq 1 20); do
+                            # Poll every 15s for up to 2 minutes (8 attempts).
+                            for i in $(seq 1 8); do
                                 ROLLOUT=$(aws ecs describe-services \
                                     --region ${AWS_REGION} \
                                     --cluster ${ECS_CLUSTER} \
@@ -436,7 +435,7 @@ print('Task definition updated successfully')
                                     --query 'services[0].deployments[?status==`PRIMARY`].desiredCount | [0]' \
                                     --output text)
 
-                                echo "Attempt $i/20 — running=$RUNNING desired=$DESIRED rolloutState=$ROLLOUT"
+                                echo "Attempt $i/8 — running=$RUNNING desired=$DESIRED rolloutState=$ROLLOUT"
 
                                 if [ "$ROLLOUT" = "COMPLETED" ] && [ "$RUNNING" = "$DESIRED" ]; then
                                     echo "✅ Deployment COMPLETED — service is stable"
@@ -444,14 +443,22 @@ print('Task definition updated successfully')
                                 fi
 
                                 if [ "$ROLLOUT" = "FAILED" ]; then
-                                    echo "❌ Deployment FAILED — circuit breaker rolled back the service"
+                                    echo "❌ Deployment FAILED — circuit breaker rolled back"
+                                    echo "--- Last 5 ECS service events ---"
+                                    aws ecs describe-services \
+                                        --region ${AWS_REGION} \
+                                        --cluster ${ECS_CLUSTER} \
+                                        --services ${ECS_SERVICE} \
+                                        --no-cli-pager \
+                                        --query 'services[0].events[:5]' \
+                                        --output table
                                     exit 1
                                 fi
 
                                 sleep 15
                             done
 
-                            echo "--- ECS service status ---"
+                            echo "--- Final ECS service state ---"
                             aws ecs describe-services \
                                 --region ${AWS_REGION} \
                                 --cluster ${ECS_CLUSTER} \
