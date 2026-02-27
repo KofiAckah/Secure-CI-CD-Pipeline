@@ -350,14 +350,14 @@ print('Task definition updated successfully')
         stage('Verify ECS Deployment') {
             steps {
                 echo '=== Waiting for ECS service to stabilize ==='
-                timeout(time: 15, unit: 'MINUTES') {
+                timeout(time: 7, unit: 'MINUTES') {
                     script {
                         sh '''
                             echo "--- Waiting for service to reach steady state ---"
-                            # Poll every 15s for up to 15 minutes (60 attempts).
+                            # Poll every 15s for up to 7 minutes (28 attempts).
                             # Uses JMESPath --query to extract values directly from the
                             # AWS CLI — no Python json parsing or quoting issues.
-                            for i in $(seq 1 60); do
+                            for i in $(seq 1 28); do
                                 ROLLOUT=$(aws ecs describe-services \
                                     --region ${AWS_REGION} \
                                     --cluster ${ECS_CLUSTER} \
@@ -382,7 +382,7 @@ print('Task definition updated successfully')
                                     --query 'services[0].deployments[?status==`PRIMARY`].desiredCount | [0]' \
                                     --output text)
 
-                                echo "Attempt $i/60 — running=$RUNNING desired=$DESIRED rolloutState=$ROLLOUT"
+                                echo "Attempt $i/28 — running=$RUNNING desired=$DESIRED rolloutState=$ROLLOUT"
 
                                 if [ "$ROLLOUT" = "COMPLETED" ] && [ "$RUNNING" = "$DESIRED" ]; then
                                     echo "✅ Deployment COMPLETED — service is stable"

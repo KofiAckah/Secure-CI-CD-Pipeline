@@ -65,7 +65,7 @@ module "parameters" {
   postgres_user        = var.postgres_user
   postgres_password    = var.postgres_password
   backend_port         = var.backend_port
-  db_host              = var.db_host
+  db_host              = module.rds.db_address
   db_port              = var.db_port
   compose_project_name = var.compose_project_name
   frontend_port        = var.frontend_port
