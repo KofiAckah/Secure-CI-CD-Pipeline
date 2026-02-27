@@ -28,6 +28,11 @@ variable "ecs_security_group_id" {
   type        = string
 }
 
+variable "jenkins_sg_id" {
+  description = "Security group ID of Jenkins (to allow running DB migrations from CI/CD)"
+  type        = string
+}
+
 variable "db_name" {
   description = "Database name"
   type        = string

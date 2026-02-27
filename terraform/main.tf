@@ -129,6 +129,7 @@ module "rds" {
   vpc_id                 = module.networking.vpc_id
   private_subnet_ids     = module.networking.private_subnet_ids
   ecs_security_group_id  = module.ecs.ecs_security_group_id
+  jenkins_sg_id          = module.security.jenkins_sg_id
   db_name                = var.db_name
   db_username            = var.db_username
   db_password            = var.db_password

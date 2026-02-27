@@ -30,6 +30,15 @@ resource "aws_security_group" "rds_sg" {
     security_groups = [var.ecs_security_group_id]
   }
 
+  # Allow PostgreSQL from Jenkins for DB migrations
+  ingress {
+    description     = "PostgreSQL from Jenkins for DB migrations"
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [var.jenkins_sg_id]
+  }
+
   egress {
     description = "Allow all outbound traffic"
     from_port   = 0

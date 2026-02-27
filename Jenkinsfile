@@ -274,6 +274,60 @@ pipeline {
         }
 
         // ============================================================
+        // Stage 9b: DB Migration — ensure schema exists in RDS
+        // ============================================================
+        stage('DB Migration') {
+            steps {
+                echo '=== Running DB schema migration against RDS ==='
+                sh '''
+                    # Pull DB connection details from SSM (same params ECS uses)
+                    DB_HOST=$(aws ssm get-parameter \
+                        --name "/${PROJECT_NAME}/${ENVIRONMENT}/app/db_host" \
+                        --region ${AWS_REGION} \
+                        --query "Parameter.Value" \
+                        --output text)
+
+                    DB_USER=$(aws ssm get-parameter \
+                        --name "/${PROJECT_NAME}/${ENVIRONMENT}/db/user" \
+                        --with-decryption \
+                        --region ${AWS_REGION} \
+                        --query "Parameter.Value" \
+                        --output text)
+
+                    DB_PASS=$(aws ssm get-parameter \
+                        --name "/${PROJECT_NAME}/${ENVIRONMENT}/db/password" \
+                        --with-decryption \
+                        --region ${AWS_REGION} \
+                        --query "Parameter.Value" \
+                        --output text)
+
+                    DB_NAME=$(aws ssm get-parameter \
+                        --name "/${PROJECT_NAME}/${ENVIRONMENT}/db/name" \
+                        --region ${AWS_REGION} \
+                        --query "Parameter.Value" \
+                        --output text)
+
+                    echo "Running init.sql against RDS host: $DB_HOST"
+
+                    # Use postgres client container (same VPC, Jenkins SG now allowed in RDS SG)
+                    docker run --rm \
+                        -e PGPASSWORD="$DB_PASS" \
+                        -v ${WORKSPACE}/SpendWise-Core-App/backend:/sql \
+                        postgres:16-alpine \
+                        psql \
+                            --host="$DB_HOST" \
+                            --port=5432 \
+                            --username="$DB_USER" \
+                            --dbname="$DB_NAME" \
+                            --file=/sql/init.sql \
+                            --no-password
+
+                    echo "✅ DB migration complete"
+                '''
+            }
+        }
+
+        // ============================================================
         // Stage 10: Deploy to ECS
         // ============================================================
         stage('Deploy to ECS') {
@@ -350,14 +404,14 @@ print('Task definition updated successfully')
         stage('Verify ECS Deployment') {
             steps {
                 echo '=== Waiting for ECS service to stabilize ==='
-                timeout(time: 7, unit: 'MINUTES') {
+                timeout(time: 5, unit: 'MINUTES') {
                     script {
                         sh '''
                             echo "--- Waiting for service to reach steady state ---"
-                            # Poll every 15s for up to 7 minutes (28 attempts).
+                            # Poll every 15s for up to 5 minutes (20 attempts).
                             # Uses JMESPath --query to extract values directly from the
                             # AWS CLI — no Python json parsing or quoting issues.
-                            for i in $(seq 1 28); do
+                            for i in $(seq 1 20); do
                                 ROLLOUT=$(aws ecs describe-services \
                                     --region ${AWS_REGION} \
                                     --cluster ${ECS_CLUSTER} \
@@ -382,7 +436,7 @@ print('Task definition updated successfully')
                                     --query 'services[0].deployments[?status==`PRIMARY`].desiredCount | [0]' \
                                     --output text)
 
-                                echo "Attempt $i/28 — running=$RUNNING desired=$DESIRED rolloutState=$ROLLOUT"
+                                echo "Attempt $i/20 — running=$RUNNING desired=$DESIRED rolloutState=$ROLLOUT"
 
                                 if [ "$ROLLOUT" = "COMPLETED" ] && [ "$RUNNING" = "$DESIRED" ]; then
                                     echo "✅ Deployment COMPLETED — service is stable"
