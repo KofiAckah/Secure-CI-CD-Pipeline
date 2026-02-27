@@ -350,24 +350,51 @@ print('Task definition updated successfully')
         stage('Verify ECS Deployment') {
             steps {
                 echo '=== Waiting for ECS service to stabilize ==='
-                script {
-                    sh '''
-                        echo "--- Waiting for service to reach steady state ---"
-                        aws ecs wait services-stable \
-                            --region ${AWS_REGION} \
-                            --cluster ${ECS_CLUSTER} \
-                            --services ${ECS_SERVICE}
+                timeout(time: 15, unit: 'MINUTES') {
+                    script {
+                        sh '''
+                            echo "--- Waiting for service to reach steady state ---"
+                            # Poll every 15s for up to 15 minutes (60 attempts).
+                            # The circuit breaker will roll back a bad deployment within
+                            # a few minutes so we should not need the full 15 minutes.
+                            for i in $(seq 1 60); do
+                                STATUS=$(aws ecs describe-services \
+                                    --region ${AWS_REGION} \
+                                    --cluster ${ECS_CLUSTER} \
+                                    --services ${ECS_SERVICE} \
+                                    --no-cli-pager \
+                                    --query 'services[0].deployments' \
+                                    --output json)
 
-                        echo "--- ECS service status ---"
-                        aws ecs describe-services \
-                            --region ${AWS_REGION} \
-                            --cluster ${ECS_CLUSTER} \
-                            --services ${ECS_SERVICE} \
-                            --query 'services[0].{Status:status,Running:runningCount,Desired:desiredCount,TaskDef:taskDefinition}' \
-                            --output table
+                                RUNNING=$(echo $STATUS | python3 -c "import json,sys; d=json.load(sys.stdin); p=[x for x in d if x[\"status\"]==\"PRIMARY\"]; print(p[0][\"runningCount\"] if p else 0)")
+                                DESIRED=$(echo $STATUS | python3 -c "import json,sys; d=json.load(sys.stdin); p=[x for x in d if x[\"status\"]==\"PRIMARY\"]; print(p[0][\"desiredCount\"] if p else 0)")
+                                ROLLOUT=$(echo $STATUS | python3 -c "import json,sys; d=json.load(sys.stdin); p=[x for x in d if x[\"status\"]==\"PRIMARY\"]; print(p[0].get(\"rolloutState\",\"UNKNOWN\") if p else \"UNKNOWN\")")
 
-                        echo "✅ ECS deployment verified"
-                    '''
+                                echo "Attempt $i/60 — running=$RUNNING desired=$DESIRED rolloutState=$ROLLOUT"
+
+                                if [ "$ROLLOUT" = "COMPLETED" ] && [ "$RUNNING" = "$DESIRED" ]; then
+                                    echo "✅ Deployment COMPLETED — service is stable"
+                                    break
+                                fi
+
+                                if [ "$ROLLOUT" = "FAILED" ]; then
+                                    echo "❌ Deployment FAILED — circuit breaker rolled back the service"
+                                    exit 1
+                                fi
+
+                                sleep 15
+                            done
+
+                            echo "--- ECS service status ---"
+                            aws ecs describe-services \
+                                --region ${AWS_REGION} \
+                                --cluster ${ECS_CLUSTER} \
+                                --services ${ECS_SERVICE} \
+                                --no-cli-pager \
+                                --query 'services[0].{Status:status,Running:runningCount,Desired:desiredCount,TaskDef:taskDefinition}' \
+                                --output table
+                        '''
+                    }
                 }
             }
         }
