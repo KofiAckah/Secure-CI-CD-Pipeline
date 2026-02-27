@@ -23,7 +23,7 @@ pipeline {
         // ECS Configuration
         ECS_CLUSTER       = 'monitor-spendwise-dev-cluster'
         ECS_SERVICE       = 'monitor-spendwise-dev-service'
-        TASK_FAMILY       = 'monitor-spendwise-task'
+        TASK_FAMILY       = 'monitor-spendwise-dev-task'
 
         // Security Reports Directory
         REPORTS_DIR = 'security-reports'
