@@ -110,3 +110,31 @@ variable "common_tags" {
   type        = map(string)
   default     = {}
 }
+
+# ==============================================================
+# ECS & RDS Variables
+# ==============================================================
+
+variable "db_name" {
+  description = "RDS PostgreSQL database name"
+  type        = string
+  default     = "spendwise"
+}
+
+variable "db_username" {
+  description = "RDS PostgreSQL master username"
+  type        = string
+  default     = "spendwise_admin"
+}
+
+variable "db_password" {
+  description = "RDS PostgreSQL master password"
+  type        = string
+  sensitive   = true
+}
+
+variable "image_tag" {
+  description = "Docker image tag for ECS (e.g., latest, v1.0.0, or build number)"
+  type        = string
+  default     = "latest"
+}

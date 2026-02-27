@@ -100,6 +100,42 @@ module "monitoring" {
   aws_region   = var.aws_region
 }
 
+# ==============================================================
+# ECS Module – Fargate cluster, task definition, and service
+# ==============================================================
+module "ecs" {
+  source = "./ecs"
+
+  project_name       = var.project_name
+  environment        = var.environment
+  aws_region         = var.aws_region
+  vpc_id             = module.networking.vpc_id
+  public_subnet_ids  = module.networking.public_subnet_ids
+  backend_image      = module.ecr.backend_repository_url
+  frontend_image     = module.ecr.frontend_repository_url
+  image_tag          = var.image_tag
+  db_name            = var.db_name
+}
+
+# ==============================================================
+# RDS Module – PostgreSQL database for SpendWise application
+# ==============================================================
+module "rds" {
+  source = "./rds"
+
+  project_name           = var.project_name
+  environment            = var.environment
+  aws_region             = var.aws_region
+  vpc_id                 = module.networking.vpc_id
+  private_subnet_ids     = module.networking.private_subnet_ids
+  ecs_security_group_id  = module.ecs.ecs_security_group_id
+  db_name                = var.db_name
+  db_username            = var.db_username
+  db_password            = var.db_password
+
+  depends_on = [module.ecs]
+}
+
 resource "local_file" "ansible_inventory" {
   content  = <<EOT
 [jenkins_server]

@@ -139,6 +139,56 @@
         state: restarted
 
     # ==============================================
+    # CodeQL CLI Installation
+    # ==============================================
+    - name: Check if CodeQL is already installed
+      stat:
+        path: /usr/local/bin/codeql
+      register: codeql_installed
+
+    - name: Create CodeQL CLI directory
+      file:
+        path: /opt/codeql-cli
+        state: directory
+        mode: '0755'
+      when: not codeql_installed.stat.exists
+
+    - name: Download CodeQL bundle
+      get_url:
+        url: https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.17.6/codeql-bundle-linux64.tar.gz
+        dest: /tmp/codeql-bundle.tar.gz
+        mode: '0644'
+      when: not codeql_installed.stat.exists
+
+    - name: Extract CodeQL bundle
+      unarchive:
+        src: /tmp/codeql-bundle.tar.gz
+        dest: /opt/codeql-cli/
+        remote_src: yes
+      when: not codeql_installed.stat.exists
+
+    - name: Create symlink for CodeQL CLI
+      file:
+        src: /opt/codeql-cli/codeql/codeql
+        dest: /usr/local/bin/codeql
+        state: link
+      when: not codeql_installed.stat.exists
+
+    - name: Verify CodeQL installation
+      command: codeql --version
+      register: codeql_version
+      changed_when: false
+
+    - name: Display CodeQL version
+      debug:
+        msg: "CodeQL installed successfully: {{ codeql_version.stdout }}"
+
+    - name: Clean up CodeQL tarball
+      file:
+        path: /tmp/codeql-bundle.tar.gz
+        state: absent
+
+    # ==============================================
     # Summary
     # ==============================================
     - name: Display Jenkins access information

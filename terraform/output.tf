@@ -90,3 +90,74 @@ output "guardduty_detector_id" {
   description = "GuardDuty detector ID for this account/region."
   value       = module.monitoring.guardduty_detector_id
 }
+
+# ==============================================================
+# ECS module outputs
+# ==============================================================
+output "ecs_cluster_name" {
+  description = "Name of the ECS cluster"
+  value       = module.ecs.cluster_name
+}
+
+output "ecs_cluster_arn" {
+  description = "ARN of the ECS cluster"
+  value       = module.ecs.cluster_arn
+}
+
+output "ecs_service_name" {
+  description = "Name of the ECS service"
+  value       = module.ecs.service_name
+}
+
+output "ecs_task_definition_family" {
+  description = "Family name of the ECS task definition"
+  value       = module.ecs.task_definition_family
+}
+
+output "ecs_task_definition_arn" {
+  description = "ARN of the ECS task definition"
+  value       = module.ecs.task_definition_arn
+}
+
+output "ecs_security_group_id" {
+  description = "Security group ID for ECS tasks"
+  value       = module.ecs.ecs_security_group_id
+}
+
+output "ecs_cloudwatch_log_group" {
+  description = "CloudWatch log group for ECS containers"
+  value       = module.ecs.cloudwatch_log_group
+}
+
+output "ecs_execution_role_arn" {
+  description = "ARN of the ECS task execution role"
+  value       = module.ecs.execution_role_arn
+}
+
+# ==============================================================
+# RDS module outputs
+# ==============================================================
+output "rds_endpoint" {
+  description = "Connection endpoint for the RDS database"
+  value       = module.rds.db_endpoint
+}
+
+output "rds_address" {
+  description = "Hostname/address of the RDS database"
+  value       = module.rds.db_address
+}
+
+output "rds_database_name" {
+  description = "Name of the database"
+  value       = module.rds.db_name
+}
+
+output "rds_security_group_id" {
+  description = "Security group ID for RDS database"
+  value       = module.rds.rds_security_group_id
+}
+
+output "rds_instance_id" {
+  description = "RDS instance identifier"
+  value       = module.rds.db_instance_id
+}
