@@ -404,7 +404,7 @@ print('Task definition updated successfully')
         stage('Verify ECS Deployment') {
             steps {
                 echo '=== Waiting for ECS service to stabilize ==='
-                timeout(time: 5, unit: 'MINUTES') {
+                timeout(time: 2.5, unit: 'MINUTES') {
                     script {
                         sh '''
                             echo "--- Waiting for service to reach steady state ---"
