@@ -355,20 +355,32 @@ print('Task definition updated successfully')
                         sh '''
                             echo "--- Waiting for service to reach steady state ---"
                             # Poll every 15s for up to 15 minutes (60 attempts).
-                            # The circuit breaker will roll back a bad deployment within
-                            # a few minutes so we should not need the full 15 minutes.
+                            # Uses JMESPath --query to extract values directly from the
+                            # AWS CLI — no Python json parsing or quoting issues.
                             for i in $(seq 1 60); do
-                                STATUS=$(aws ecs describe-services \
+                                ROLLOUT=$(aws ecs describe-services \
                                     --region ${AWS_REGION} \
                                     --cluster ${ECS_CLUSTER} \
                                     --services ${ECS_SERVICE} \
                                     --no-cli-pager \
-                                    --query 'services[0].deployments' \
-                                    --output json)
+                                    --query 'services[0].deployments[?status==`PRIMARY`].rolloutState | [0]' \
+                                    --output text)
 
-                                RUNNING=$(echo $STATUS | python3 -c "import json,sys; d=json.load(sys.stdin); p=[x for x in d if x[\"status\"]==\"PRIMARY\"]; print(p[0][\"runningCount\"] if p else 0)")
-                                DESIRED=$(echo $STATUS | python3 -c "import json,sys; d=json.load(sys.stdin); p=[x for x in d if x[\"status\"]==\"PRIMARY\"]; print(p[0][\"desiredCount\"] if p else 0)")
-                                ROLLOUT=$(echo $STATUS | python3 -c "import json,sys; d=json.load(sys.stdin); p=[x for x in d if x[\"status\"]==\"PRIMARY\"]; print(p[0].get(\"rolloutState\",\"UNKNOWN\") if p else \"UNKNOWN\")")
+                                RUNNING=$(aws ecs describe-services \
+                                    --region ${AWS_REGION} \
+                                    --cluster ${ECS_CLUSTER} \
+                                    --services ${ECS_SERVICE} \
+                                    --no-cli-pager \
+                                    --query 'services[0].deployments[?status==`PRIMARY`].runningCount | [0]' \
+                                    --output text)
+
+                                DESIRED=$(aws ecs describe-services \
+                                    --region ${AWS_REGION} \
+                                    --cluster ${ECS_CLUSTER} \
+                                    --services ${ECS_SERVICE} \
+                                    --no-cli-pager \
+                                    --query 'services[0].deployments[?status==`PRIMARY`].desiredCount | [0]' \
+                                    --output text)
 
                                 echo "Attempt $i/60 — running=$RUNNING desired=$DESIRED rolloutState=$ROLLOUT"
 
