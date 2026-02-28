@@ -103,38 +103,44 @@ pipeline {
             steps {
                 echo '=== Scanning dependencies for known vulnerabilities ==='
                 withCredentials([string(credentialsId: 'snyk-token', variable: 'SNYK_TOKEN')]) {
-                    sh '''
-                        docker run --rm \
-                            -e SNYK_TOKEN=${SNYK_TOKEN} \
-                            -v ${WORKSPACE}/SpendWise-Core-App/backend:/app \
-                            snyk/snyk:node \
-                            test \
-                            --severity-threshold=high \
-                            --json \
-                            > ${REPORTS_DIR}/snyk-report.json 2>&1
-                        SNYK_EXIT=$?
+                    dir('SpendWise-Core-App/backend') {
+                        sh '''
+                            # Install snyk CLI locally (avoids Docker user/permission issues)
+                            npm install snyk --save-dev --loglevel=error
 
-                        # exit 0 = no vulns, exit 1 = vulns found at threshold, exit 2 = error/auth
-                        if [ $SNYK_EXIT -eq 1 ]; then
-                            echo "❌ Snyk found HIGH/CRITICAL vulnerabilities — blocking pipeline"
-                            python3 -c "
-import json,sys
+                            # Authenticate with the token from Jenkins credentials
+                            ./node_modules/.bin/snyk auth ${SNYK_TOKEN}
+
+                            # Run the scan — output to console AND capture exit code
+                            # exit 0 = clean, exit 1 = HIGH/CRITICAL found, exit 2 = scan error
+                            ./node_modules/.bin/snyk test \
+                                --severity-threshold=high \
+                                --json \
+                                > ../../${REPORTS_DIR}/snyk-report.json 2>&1
+                            SNYK_EXIT=$?
+
+                            if [ $SNYK_EXIT -eq 1 ]; then
+                                echo "❌ Snyk found HIGH/CRITICAL vulnerabilities — blocking pipeline"
+                                python3 -c "
+import json, sys
 try:
-    data=json.load(open('${REPORTS_DIR}/snyk-report.json'))
-    vulns=[v for v in data.get('vulnerabilities',[]) if v.get('severity') in ('high','critical')]
+    data = json.load(open('../../${REPORTS_DIR}/snyk-report.json'))
+    vulns = [v for v in data.get('vulnerabilities', []) if v.get('severity') in ('high', 'critical')]
     print(f'Found {len(vulns)} HIGH/CRITICAL vulnerabilities:')
     for v in vulns[:10]:
         print(f'  [{v[\"severity\"].upper()}] {v[\"id\"]} in {v[\"packageName\"]}@{v[\"version\"]}')
 except Exception as e:
     print(f'Could not parse report: {e}')
-" 2>/dev/null || true
-                            exit 1
-                        elif [ $SNYK_EXIT -eq 2 ]; then
-                            echo "❌ Snyk scan error (bad token or network) — blocking pipeline"
-                            exit 1
-                        fi
-                        echo "✅ No HIGH/CRITICAL vulnerabilities found"
-                    '''
+" || true
+                                exit 1
+                            elif [ $SNYK_EXIT -eq 2 ]; then
+                                echo "❌ Snyk scan error — check token validity and network access"
+                                cat ../../${REPORTS_DIR}/snyk-report.json || true
+                                exit 1
+                            fi
+                            echo "✅ No HIGH/CRITICAL vulnerabilities found"
+                        '''
+                    }
                 }
                 echo '✅ Dependency scan complete'
             }
