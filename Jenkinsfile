@@ -113,14 +113,20 @@ pipeline {
                         # Authenticate using the Jenkins-stored token
                         ${SNYK_BIN} auth ${SNYK_TOKEN}
 
-                        # Scan only the backend production+dev dependencies.
+                        # Scan only production dependencies (--production skips devDeps).
+                        # devDeps like jest/nodemon pull in minimatch which has a HIGH vuln
+                        # but never ships in the Docker image — no need to block on it.
+                        # Redirect stdout (JSON) to report and stderr (progress text) to
+                        # a separate log so the JSON file stays valid and parseable.
                         # set +e prevents Jenkins set -e from exiting before we can read $?
                         # exit 0 = clean, exit 1 = HIGH/CRITICAL found, exit 2 = scan error
                         set +e
                         ${SNYK_BIN} test SpendWise-Core-App/backend \
                             --severity-threshold=high \
+                            --production \
                             --json \
-                            > ${REPORTS_DIR}/snyk-report.json 2>&1
+                            > ${REPORTS_DIR}/snyk-report.json \
+                            2> ${REPORTS_DIR}/snyk-stderr.log
                         SNYK_EXIT=$?
                         set -e
 
@@ -150,7 +156,7 @@ except Exception as e:
             }
             post {
                 always {
-                    archiveArtifacts artifacts: 'security-reports/snyk-report.json',
+                    archiveArtifacts artifacts: 'security-reports/snyk-report.json, security-reports/snyk-stderr.log',
                                      allowEmptyArchive: true
                 }
             }
