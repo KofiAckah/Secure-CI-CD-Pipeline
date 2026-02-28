@@ -103,28 +103,33 @@ pipeline {
             steps {
                 echo '=== Scanning dependencies for known vulnerabilities ==='
                 withCredentials([string(credentialsId: 'snyk-token', variable: 'SNYK_TOKEN')]) {
-                    dir('SpendWise-Core-App/backend') {
-                        sh '''
-                            # Install snyk CLI locally (avoids Docker user/permission issues)
-                            npm install snyk --save-dev --loglevel=error
+                    sh '''
+                        # Install snyk in the WORKSPACE root (not inside backend/) so that
+                        # snyk's own transitive deps (e.g. minimatch) are never included in
+                        # the scan results — only the app's real dependencies are scanned.
+                        npm install snyk --save-dev --prefix ${WORKSPACE}/.snyk-cli --loglevel=error
+                        SNYK_BIN="${WORKSPACE}/.snyk-cli/node_modules/.bin/snyk"
 
-                            # Authenticate with the token from Jenkins credentials
-                            ./node_modules/.bin/snyk auth ${SNYK_TOKEN}
+                        # Authenticate using the Jenkins-stored token
+                        ${SNYK_BIN} auth ${SNYK_TOKEN}
 
-                            # Run the scan — output to console AND capture exit code
-                            # exit 0 = clean, exit 1 = HIGH/CRITICAL found, exit 2 = scan error
-                            ./node_modules/.bin/snyk test \
-                                --severity-threshold=high \
-                                --json \
-                                > ../../${REPORTS_DIR}/snyk-report.json 2>&1
-                            SNYK_EXIT=$?
+                        # Scan only the backend production+dev dependencies.
+                        # set +e prevents Jenkins set -e from exiting before we can read $?
+                        # exit 0 = clean, exit 1 = HIGH/CRITICAL found, exit 2 = scan error
+                        set +e
+                        ${SNYK_BIN} test SpendWise-Core-App/backend \
+                            --severity-threshold=high \
+                            --json \
+                            > ${REPORTS_DIR}/snyk-report.json 2>&1
+                        SNYK_EXIT=$?
+                        set -e
 
-                            if [ $SNYK_EXIT -eq 1 ]; then
-                                echo "❌ Snyk found HIGH/CRITICAL vulnerabilities — blocking pipeline"
-                                python3 -c "
+                        if [ $SNYK_EXIT -eq 1 ]; then
+                            echo "❌ Snyk found HIGH/CRITICAL vulnerabilities — blocking pipeline"
+                            python3 -c "
 import json, sys
 try:
-    data = json.load(open('../../${REPORTS_DIR}/snyk-report.json'))
+    data = json.load(open('${REPORTS_DIR}/snyk-report.json'))
     vulns = [v for v in data.get('vulnerabilities', []) if v.get('severity') in ('high', 'critical')]
     print(f'Found {len(vulns)} HIGH/CRITICAL vulnerabilities:')
     for v in vulns[:10]:
@@ -132,15 +137,14 @@ try:
 except Exception as e:
     print(f'Could not parse report: {e}')
 " || true
-                                exit 1
-                            elif [ $SNYK_EXIT -eq 2 ]; then
-                                echo "❌ Snyk scan error — check token validity and network access"
-                                cat ../../${REPORTS_DIR}/snyk-report.json || true
-                                exit 1
-                            fi
-                            echo "✅ No HIGH/CRITICAL vulnerabilities found"
-                        '''
-                    }
+                            exit 1
+                        elif [ $SNYK_EXIT -eq 2 ]; then
+                            echo "❌ Snyk scan error — check token validity and network access"
+                            cat ${REPORTS_DIR}/snyk-report.json || true
+                            exit 1
+                        fi
+                        echo "✅ No HIGH/CRITICAL vulnerabilities found"
+                    '''
                 }
                 echo '✅ Dependency scan complete'
             }
