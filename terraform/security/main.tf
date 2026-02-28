@@ -346,7 +346,8 @@ resource "aws_iam_role_policy" "jenkins_ecs_deploy" {
           "ecs:ListTasks",
           "ecs:ListTaskDefinitions",
           "ecs:DescribeClusters",
-          "ecs:ListClusters"
+          "ecs:ListClusters",
+          "ec2:DescribeNetworkInterfaces"
         ]
         Resource = "*"
       },

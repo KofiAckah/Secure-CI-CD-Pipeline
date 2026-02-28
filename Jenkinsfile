@@ -508,6 +508,8 @@ print('Task definition updated successfully')
                                                    usernameVariable: 'MONITORING_USER')]) {
                     sh '''
                         # --- Discover the current ECS task private IP ---
+                        # Use describe-tasks containers[].networkInterfaces directly.
+                        # This avoids needing ec2:DescribeNetworkInterfaces.
                         TASK_ARN=$(aws ecs list-tasks \
                             --region ${AWS_REGION} \
                             --cluster ${ECS_CLUSTER} \
@@ -515,19 +517,12 @@ print('Task definition updated successfully')
                             --no-cli-pager \
                             --output text)
 
-                        ECS_ENI=$(aws ecs describe-tasks \
+                        ECS_IP=$(aws ecs describe-tasks \
                             --region ${AWS_REGION} \
                             --cluster ${ECS_CLUSTER} \
                             --tasks ${TASK_ARN} \
                             --no-cli-pager \
-                            --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value | [0]' \
-                            --output text)
-
-                        ECS_IP=$(aws ec2 describe-network-interfaces \
-                            --region ${AWS_REGION} \
-                            --network-interface-ids ${ECS_ENI} \
-                            --no-cli-pager \
-                            --query 'NetworkInterfaces[0].PrivateIpAddress' \
+                            --query 'tasks[0].containers[0].networkInterfaces[0].privateIpv4Address' \
                             --output text)
 
                         echo "ECS backend private IP: ${ECS_IP}"
