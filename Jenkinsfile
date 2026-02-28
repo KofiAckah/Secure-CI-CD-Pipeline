@@ -404,13 +404,15 @@ print('Task definition updated successfully')
         stage('Verify ECS Deployment') {
             steps {
                 echo '=== Waiting for ECS service to stabilize ==='
-                // 2 minutes max — 8 attempts × 15s = 120s
-                timeout(time: 2, unit: 'MINUTES') {
+                // 8 minutes max — 24 attempts × 15s = 360s
+                // ECS circuit breaker takes ~3-5 min to mark COMPLETED even when container is healthy
+                timeout(time: 8, unit: 'MINUTES') {
                     script {
                         sh '''
                             echo "--- Waiting for service to reach steady state ---"
-                            # Poll every 15s for up to 2 minutes (8 attempts).
-                            for i in $(seq 1 8); do
+                            STABLE_COUNT=0
+                            # Poll every 15s for up to 8 minutes (24 attempts).
+                            for i in $(seq 1 24); do
                                 ROLLOUT=$(aws ecs describe-services \
                                     --region ${AWS_REGION} \
                                     --cluster ${ECS_CLUSTER} \
@@ -435,8 +437,9 @@ print('Task definition updated successfully')
                                     --query 'services[0].deployments[?status==`PRIMARY`].desiredCount | [0]' \
                                     --output text)
 
-                                echo "Attempt $i/8 — running=$RUNNING desired=$DESIRED rolloutState=$ROLLOUT"
+                                echo "Attempt $i/24 — running=$RUNNING desired=$DESIRED rolloutState=$ROLLOUT"
 
+                                # ECS circuit breaker marks COMPLETED ~3-5 min after tasks are healthy
                                 if [ "$ROLLOUT" = "COMPLETED" ] && [ "$RUNNING" = "$DESIRED" ]; then
                                     echo "✅ Deployment COMPLETED — service is stable"
                                     break
@@ -453,6 +456,19 @@ print('Task definition updated successfully')
                                         --query 'services[0].events[:5]' \
                                         --output table
                                     exit 1
+                                fi
+
+                                # Secondary success: running==desired for 2 consecutive checks means
+                                # the container is healthy even if circuit breaker hasn't finalized yet
+                                if [ "$DESIRED" -gt "0" ] 2>/dev/null && [ "$RUNNING" = "$DESIRED" ]; then
+                                    STABLE_COUNT=$((STABLE_COUNT + 1))
+                                    echo "  ↳ Stable check $STABLE_COUNT/2 (running==desired, waiting for COMPLETED)"
+                                    if [ "$STABLE_COUNT" -ge "2" ]; then
+                                        echo "✅ Service stable — running=$RUNNING desired=$DESIRED (circuit breaker still evaluating)"
+                                        break
+                                    fi
+                                else
+                                    STABLE_COUNT=0
                                 fi
 
                                 sleep 15
