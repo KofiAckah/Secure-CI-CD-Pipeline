@@ -255,8 +255,9 @@ resource "aws_ecs_task_definition" "app" {
       }
       # Health check: app.get('/api/health', ...) is the registered route in index.js
       # /health does NOT exist — returns 404 — ECS kills the container after 5 retries
+      # node:20-alpine uses busybox wget, not curl
       healthCheck = {
-        command     = ["CMD-SHELL", "curl -f http://localhost:5000/api/health || exit 1"]
+        command     = ["CMD-SHELL", "wget -qO- http://localhost:5000/api/health || exit 1"]
         interval    = 30
         timeout     = 10
         retries     = 5
@@ -289,7 +290,7 @@ resource "aws_ecs_task_definition" "app" {
         }
       }
       healthCheck = {
-        command     = ["CMD-SHELL", "curl -f http://localhost:80/ || exit 1"]
+        command     = ["CMD-SHELL", "wget -qO- http://localhost:80/ || exit 1"]
         interval    = 30
         timeout     = 5
         retries     = 3
