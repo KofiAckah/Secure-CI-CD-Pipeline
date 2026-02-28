@@ -185,6 +185,28 @@
       notify: Restart Prometheus
       tags: [prometheus, config]
 
+    - name: Create initial ECS targets file for spendwise_backend scrape job
+      # Jenkins overwrites this file after each ECS deploy with the new task IP.
+      # Prometheus file_sd auto-reloads on change (refresh_interval: 30s).
+      # Initial value uses app_server_ip as a placeholder; Jenkins updates it.
+      copy:
+        content: |
+          [
+            {
+              "targets": ["{{ app_server_ip }}:5000"],
+              "labels": {
+                "service": "spendwise-backend",
+                "environment": "{{ app_env | default('dev') }}"
+              }
+            }
+          ]
+        dest: "{{ prometheus_config_dir | default('/etc/prometheus') }}/ecs_targets.json"
+        owner: prometheus
+        group: prometheus
+        mode: '0644'
+        force: no
+      tags: [prometheus, config]
+
     # ----------------------------------------------------------
     # Prometheus – systemd service
     # ----------------------------------------------------------

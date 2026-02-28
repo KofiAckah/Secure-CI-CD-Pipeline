@@ -489,7 +489,68 @@ print('Task definition updated successfully')
         }
 
         // ============================================================
-        // Stage 12: Cleanup Old Images on Jenkins Server
+        // Stage 12: Update Prometheus ECS Scrape Target
+        // ============================================================
+        // After each ECS deploy the task gets a new private IP.
+        // Prometheus uses file_sd_configs reading ecs_targets.json on the
+        // monitoring server — this stage rewrites that file via SSH so
+        // Prometheus auto-discovers the new backend without a service reload.
+        //
+        // PREREQUISITE: Add the SpendWise PEM key to Jenkins as an
+        // "SSH Username with private key" credential with ID: monitoring-server-key
+        // (username: ubuntu, private key: contents of SpendWise-KP.pem)
+        // ============================================================
+        stage('Update Prometheus ECS Target') {
+            steps {
+                echo '=== Updating Prometheus ECS scrape target ==='
+                withCredentials([sshUserPrivateKey(credentialsId: 'monitoring-server-key',
+                                                   keyFileVariable: 'MONITORING_KEY',
+                                                   usernameVariable: 'MONITORING_USER')]) {
+                    sh '''
+                        # --- Discover the current ECS task private IP ---
+                        TASK_ARN=$(aws ecs list-tasks \
+                            --region ${AWS_REGION} \
+                            --cluster ${ECS_CLUSTER} \
+                            --query 'taskArns[0]' \
+                            --no-cli-pager \
+                            --output text)
+
+                        ECS_ENI=$(aws ecs describe-tasks \
+                            --region ${AWS_REGION} \
+                            --cluster ${ECS_CLUSTER} \
+                            --tasks ${TASK_ARN} \
+                            --no-cli-pager \
+                            --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value | [0]' \
+                            --output text)
+
+                        ECS_IP=$(aws ec2 describe-network-interfaces \
+                            --region ${AWS_REGION} \
+                            --network-interface-ids ${ECS_ENI} \
+                            --no-cli-pager \
+                            --query 'NetworkInterfaces[0].PrivateIpAddress' \
+                            --output text)
+
+                        echo "ECS backend private IP: ${ECS_IP}"
+
+                        # --- Write new ecs_targets.json on monitoring server ---
+                        # Prometheus file_sd auto-reloads this file every 30s.
+                        # No prometheus restart needed.
+                        TARGETS_JSON=$(printf '[{"targets":["%s:5000"],"labels":{"service":"spendwise-backend","environment":"dev"}}]' "${ECS_IP}")
+
+                        ssh -o StrictHostKeyChecking=no \
+                            -o ConnectTimeout=10 \
+                            -i "${MONITORING_KEY}" \
+                            ubuntu@52.57.3.18 \
+                            "echo '${TARGETS_JSON}' | sudo tee /etc/prometheus/ecs_targets.json > /dev/null && echo '✅ ecs_targets.json updated'"
+
+                        echo "✅ Prometheus will scrape ${ECS_IP}:5000 within 30 seconds"
+                    '''
+                }
+            }
+        }
+
+        // ============================================================
+        // Stage 13: Cleanup Old Images on Jenkins Server
         // ============================================================
         stage('Cleanup Old Images') {
             steps {

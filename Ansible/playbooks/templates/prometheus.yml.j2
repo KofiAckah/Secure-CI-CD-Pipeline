@@ -42,17 +42,16 @@ scrape_configs:
           service: "prometheus"
 
   # ---- SpendWise Node.js Application (port 5000 / /metrics) ---
-  # Uses app_server_ip (private VPC IP) so SG rules match intra-VPC traffic.
-  # Requires: prom-client library installed + /metrics route exposed in the app.
+  # Uses file_sd_configs so Jenkins can update the ECS task IP after each
+  # deployment without restarting Prometheus — file changes are auto-detected.
+  # Jenkins writes /etc/prometheus/ecs_targets.json post-deploy.
   - job_name: "spendwise_backend"
     metrics_path: /metrics
     scrape_interval: 15s
-    static_configs:
-      - targets:
-          - "{{ app_server_ip }}:{{ app_backend_port | default(5000) }}"
-        labels:
-          service: "spendwise-backend"
-          environment: "{{ app_env | default('dev') }}"
+    file_sd_configs:
+      - files:
+          - "{{ prometheus_config_dir | default('/etc/prometheus') }}/ecs_targets.json"
+        refresh_interval: 30s
     relabel_configs:
       - source_labels: [__address__]
         target_label: instance
