@@ -146,3 +146,177 @@ resource "aws_guardduty_detector" "main" {
     Project     = var.project_name
   }
 }
+
+# ==============================================================
+# CloudWatch Alarms — SpendWise ECS / RDS / Deployment
+# ==============================================================
+
+resource "aws_cloudwatch_metric_alarm" "ecs_cpu_high" {
+  alarm_name          = "${var.project_name}-${var.environment}-ecs-cpu-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/ECS"
+  period              = 60
+  statistic           = "Average"
+  threshold           = 80
+  alarm_description   = "ECS CPU utilisation above 80% for 2 consecutive minutes"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    ClusterName = "${var.project_name}-${var.environment}-cluster"
+    ServiceName = "${var.project_name}-${var.environment}-service"
+  }
+
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-ecs-cpu-high"
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "ecs_memory_high" {
+  alarm_name          = "${var.project_name}-${var.environment}-ecs-memory-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "MemoryUtilization"
+  namespace           = "AWS/ECS"
+  period              = 60
+  statistic           = "Average"
+  threshold           = 80
+  alarm_description   = "ECS memory utilisation above 80% for 2 consecutive minutes"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    ClusterName = "${var.project_name}-${var.environment}-cluster"
+    ServiceName = "${var.project_name}-${var.environment}-service"
+  }
+
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-ecs-memory-high"
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "ecs_no_running_tasks" {
+  alarm_name          = "${var.project_name}-${var.environment}-ecs-no-running-tasks"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "RunningTaskCount"
+  namespace           = "ECS/ContainerInsights"
+  period              = 60
+  statistic           = "Average"
+  threshold           = 1
+  alarm_description   = "ECS service has 0 running tasks — app is down"
+  treat_missing_data  = "breaching"
+
+  dimensions = {
+    ClusterName = "${var.project_name}-${var.environment}-cluster"
+    ServiceName = "${var.project_name}-${var.environment}-service"
+  }
+
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-ecs-no-running-tasks"
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "backend_errors" {
+  name           = "${var.project_name}-${var.environment}-backend-5xx"
+  pattern        = "ERROR"
+  log_group_name = "/ecs/${var.project_name}-${var.environment}"
+
+  metric_transformation {
+    name          = "Backend5xxErrors"
+    namespace     = "${var.project_name}/${var.environment}"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "backend_errors_high" {
+  alarm_name          = "${var.project_name}-${var.environment}-backend-5xx-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Backend5xxErrors"
+  namespace           = "${var.project_name}/${var.environment}"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 10
+  alarm_description   = "Backend returned more than 10 5xx errors in 1 minute"
+  treat_missing_data  = "notBreaching"
+
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-backend-5xx-high"
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "rds_cpu_high" {
+  alarm_name          = "${var.project_name}-${var.environment}-rds-cpu-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/RDS"
+  period              = 60
+  statistic           = "Average"
+  threshold           = 80
+  alarm_description   = "RDS CPU utilisation above 80%"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    DBInstanceIdentifier = "${var.project_name}-${var.environment}-db"
+  }
+
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-rds-cpu-high"
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "rds_storage_low" {
+  alarm_name          = "${var.project_name}-${var.environment}-rds-storage-low"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "FreeStorageSpace"
+  namespace           = "AWS/RDS"
+  period              = 60
+  statistic           = "Average"
+  threshold           = 1073741824 # 1 GB in bytes
+  alarm_description   = "RDS free storage below 1 GB"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    DBInstanceIdentifier = "${var.project_name}-${var.environment}-db"
+  }
+
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-rds-storage-low"
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "deployment_failures" {
+  alarm_name          = "${var.project_name}-${var.environment}-deployment-failures"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "DeploymentFailures"
+  namespace           = "${var.project_name}/${var.environment}"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "A Jenkins deployment to ECS failed — pipeline blocked by security gate or ECS error"
+  treat_missing_data  = "notBreaching"
+
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-deployment-failures"
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}

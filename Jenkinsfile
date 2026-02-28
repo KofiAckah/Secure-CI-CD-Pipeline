@@ -60,11 +60,17 @@ pipeline {
                         --source /path \
                         --report-format json \
                         --report-path /path/gitleaks-report.json \
-                        --exit-code 1 || true
+                        --exit-code 1
+                    GITLEAKS_EXIT=$?
 
                     cp SpendWise-Core-App/gitleaks-report.json ${REPORTS_DIR}/ 2>/dev/null || true
+
+                    if [ $GITLEAKS_EXIT -ne 0 ]; then
+                        echo "❌ Gitleaks detected secrets or credentials — blocking pipeline"
+                        exit 1
+                    fi
                 '''
-                echo '✅ Secret scan complete'
+                echo '✅ No secrets detected'
             }
             post {
                 always {
@@ -105,9 +111,29 @@ pipeline {
                             test \
                             --severity-threshold=high \
                             --json \
-                            > ${REPORTS_DIR}/snyk-report.json 2>&1 || true
+                            > ${REPORTS_DIR}/snyk-report.json 2>&1
+                        SNYK_EXIT=$?
 
-                        echo "Snyk scan complete - check report for findings"
+                        # exit 0 = no vulns, exit 1 = vulns found at threshold, exit 2 = error/auth
+                        if [ $SNYK_EXIT -eq 1 ]; then
+                            echo "❌ Snyk found HIGH/CRITICAL vulnerabilities — blocking pipeline"
+                            python3 -c "
+import json,sys
+try:
+    data=json.load(open('${REPORTS_DIR}/snyk-report.json'))
+    vulns=[v for v in data.get('vulnerabilities',[]) if v.get('severity') in ('high','critical')]
+    print(f'Found {len(vulns)} HIGH/CRITICAL vulnerabilities:')
+    for v in vulns[:10]:
+        print(f'  [{v[\"severity\"].upper()}] {v[\"id\"]} in {v[\"packageName\"]}@{v[\"version\"]}')
+except Exception as e:
+    print(f'Could not parse report: {e}')
+" 2>/dev/null || true
+                            exit 1
+                        elif [ $SNYK_EXIT -eq 2 ]; then
+                            echo "❌ Snyk scan error (bad token or network) — blocking pipeline"
+                            exit 1
+                        fi
+                        echo "✅ No HIGH/CRITICAL vulnerabilities found"
                     '''
                 }
                 echo '✅ Dependency scan complete'
@@ -193,7 +219,8 @@ pipeline {
                         --severity HIGH,CRITICAL \
                         --format json \
                         --output /reports/trivy-backend-report.json \
-                        ${BACKEND_ECR_REPO}:${IMAGE_TAG} || true
+                        ${BACKEND_ECR_REPO}:${IMAGE_TAG}
+                    TRIVY_BACKEND_EXIT=$?
 
                     echo "--- Scanning frontend image ---"
                     docker run --rm \
@@ -204,7 +231,24 @@ pipeline {
                         --severity HIGH,CRITICAL \
                         --format json \
                         --output /reports/trivy-frontend-report.json \
-                        ${FRONTEND_ECR_REPO}:${IMAGE_TAG} || true
+                        ${FRONTEND_ECR_REPO}:${IMAGE_TAG}
+                    TRIVY_FRONTEND_EXIT=$?
+
+                    # Print summary before failing
+                    for img_name in backend frontend; do
+                        report="${REPORTS_DIR}/trivy-${img_name}-report.json"
+                        if [ -f "$report" ]; then
+                            COUNT=$(python3 -c "import json; d=json.load(open('$report')); print(sum(len(r.get('Vulnerabilities') or []) for r in d.get('Results',[])))" 2>/dev/null || echo '?')
+                            echo "[$img_name] HIGH/CRITICAL vulnerabilities: $COUNT"
+                        fi
+                    done
+
+                    if [ $TRIVY_BACKEND_EXIT -ne 0 ] || [ $TRIVY_FRONTEND_EXIT -ne 0 ]; then
+                        echo "❌ Trivy found HIGH/CRITICAL vulnerabilities — blocking pipeline"
+                        echo "   Remediate the issues and re-run the pipeline"
+                        exit 1
+                    fi
+                    echo "✅ No HIGH/CRITICAL vulnerabilities found in either image"
                 '''
                 echo '✅ Image scan complete'
             }
@@ -603,9 +647,27 @@ print('Task definition updated successfully')
             echo "ECS Service : ${ECS_SERVICE}"
             echo "Image Tag   : ${IMAGE_TAG}"
             echo '=========================================='
+            sh '''
+                aws cloudwatch put-metric-data \
+                    --region ${AWS_REGION} \
+                    --namespace "monitor-spendwise/dev" \
+                    --metric-name DeploymentSuccess \
+                    --value 1 \
+                    --unit Count \
+                    --dimensions Pipeline=spendwise-cicd,Build=${IMAGE_TAG} || true
+            '''
         }
         failure {
             echo '❌ Pipeline failed - check security reports in build artifacts'
+            sh '''
+                aws cloudwatch put-metric-data \
+                    --region ${AWS_REGION} \
+                    --namespace "monitor-spendwise/dev" \
+                    --metric-name DeploymentFailures \
+                    --value 1 \
+                    --unit Count \
+                    --dimensions Pipeline=spendwise-cicd,Build=${IMAGE_TAG} || true
+            '''
         }
         always {
             echo '=== Cleaning up workspace and dangling Docker images ==='
