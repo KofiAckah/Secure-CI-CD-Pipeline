@@ -253,9 +253,10 @@ resource "aws_ecs_task_definition" "app" {
           "awslogs-stream-prefix" = "backend"
         }
       }
-      # FIX: app.get('/health', ...) — NOT /api/health. Wrong path → 404 → ECS kills backend
+      # Health check: app.get('/api/health', ...) is the registered route in index.js
+      # /health does NOT exist — returns 404 — ECS kills the container after 5 retries
       healthCheck = {
-        command     = ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
+        command     = ["CMD-SHELL", "curl -f http://localhost:5000/api/health || exit 1"]
         interval    = 30
         timeout     = 10
         retries     = 5

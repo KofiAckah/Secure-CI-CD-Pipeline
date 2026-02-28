@@ -138,6 +138,10 @@ resource "aws_iam_role_policy_attachment" "rds_monitoring" {
 # ==============================================================
 # Store RDS connection details in Parameter Store
 # ==============================================================
+# SSM Parameters for RDS connection details
+# Note: /db/name and /db/password are managed by the parameters module
+# to avoid duplicate state. Only store values unique to the RDS module here.
+# ==============================================================
 
 resource "aws_ssm_parameter" "db_host" {
   name        = "/${var.project_name}/${var.environment}/db/host"
@@ -165,37 +169,11 @@ resource "aws_ssm_parameter" "db_port" {
   }
 }
 
-resource "aws_ssm_parameter" "db_name" {
-  name        = "/${var.project_name}/${var.environment}/db/name"
-  description = "RDS database name"
-  type        = "String"
-  value       = var.db_name
-  overwrite   = true
-
-  tags = {
-    Project     = var.project_name
-    Environment = var.environment
-  }
-}
-
 resource "aws_ssm_parameter" "db_username" {
   name        = "/${var.project_name}/${var.environment}/db/username"
   description = "RDS database username"
   type        = "String"
   value       = var.db_username
-  overwrite   = true
-
-  tags = {
-    Project     = var.project_name
-    Environment = var.environment
-  }
-}
-
-resource "aws_ssm_parameter" "db_password" {
-  name        = "/${var.project_name}/${var.environment}/db/password"
-  description = "RDS database password"
-  type        = "SecureString"
-  value       = var.db_password
   overwrite   = true
 
   tags = {
