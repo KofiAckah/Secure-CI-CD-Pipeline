@@ -503,7 +503,7 @@ print('Task definition updated successfully')
         stage('Update Prometheus ECS Target') {
             steps {
                 echo '=== Updating Prometheus ECS scrape target ==='
-                withCredentials([sshUserPrivateKey(credentialsId: 'monitoring-server-key',
+                withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-key',
                                                    keyFileVariable: 'MONITORING_KEY',
                                                    usernameVariable: 'MONITORING_USER')]) {
                     sh '''
