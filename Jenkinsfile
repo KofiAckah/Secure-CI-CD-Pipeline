@@ -53,6 +53,9 @@ pipeline {
             steps {
                 echo '=== Scanning for hardcoded secrets and credentials ==='
                 sh '''
+                    # set +e: Gitleaks exits 1 when secrets found. Without this,
+                    # Jenkins set -e fires before GITLEAKS_EXIT=$? runs.
+                    set +e
                     docker run --rm \
                         -v ${WORKSPACE}/SpendWise-Core-App:/path \
                         zricethezav/gitleaks:latest \
@@ -62,6 +65,7 @@ pipeline {
                         --report-path /path/gitleaks-report.json \
                         --exit-code 1
                     GITLEAKS_EXIT=$?
+                    set -e
 
                     cp SpendWise-Core-App/gitleaks-report.json ${REPORTS_DIR}/ 2>/dev/null || true
 
@@ -184,6 +188,43 @@ except Exception as e:
                         javascript-security-extended
 
                     echo "CodeQL analysis complete"
+
+                    # Gate: fail if any error-level (HIGH/CRITICAL) result found.
+                    # SARIF level "error" = CodeQL high/critical severity finding.
+                    CODEQL_HIGH=$(python3 -c "
+import json, sys
+try:
+    sarif = json.load(open('${REPORTS_DIR}/codeql-results.sarif'))
+    count = sum(
+        1 for run in sarif.get('runs', [])
+        for result in run.get('results', [])
+        if result.get('level') == 'error'
+    )
+    print(count)
+except Exception:
+    print(0)
+" 2>/dev/null || echo 0)
+
+                    if [ "${CODEQL_HIGH:-0}" -gt "0" ]; then
+                        echo "❌ CodeQL found ${CODEQL_HIGH} HIGH/CRITICAL findings — blocking pipeline"
+                        python3 -c "
+import json
+try:
+    sarif = json.load(open('${REPORTS_DIR}/codeql-results.sarif'))
+    for run in sarif.get('runs', []):
+        for result in run.get('results', []):
+            if result.get('level') == 'error':
+                loc = result.get('locations', [{}])[0].get('physicalLocation', {})
+                f = loc.get('artifactLocation', {}).get('uri', 'unknown')
+                ln = loc.get('region', {}).get('startLine', '?')
+                msg = result.get('message', {}).get('text', '')[:120]
+                print(f'  [HIGH] {result.get(\"ruleId\",\"?\")} at {f}:{ln} — {msg}')
+except Exception as e:
+    print(f'Could not parse SARIF: {e}')
+" || true
+                        exit 1
+                    fi
+                    echo "✅ No HIGH/CRITICAL CodeQL findings"
                 '''
                 echo '✅ SAST scan complete'
             }
@@ -226,27 +267,59 @@ except Exception as e:
             steps {
                 echo '=== Scanning Docker images for vulnerabilities ==='
                 sh '''
+                    # Cache the Trivy vuln DB across builds (~86 MB download)
+                    mkdir -p ${WORKSPACE}/.trivy-cache
+
                     echo "--- Scanning backend image ---"
+                    # set +e: Trivy exits 1 when vulns found. Without this,
+                    # Jenkins set -e fires before TRIVY_BACKEND_EXIT=$? runs.
+                    set +e
                     docker run --rm \
                         -v /var/run/docker.sock:/var/run/docker.sock \
                         -v ${WORKSPACE}/${REPORTS_DIR}:/reports \
+                        -v ${WORKSPACE}/.trivy-cache:/root/.cache/trivy \
                         aquasec/trivy:latest image \
                         --exit-code 1 \
                         --severity HIGH,CRITICAL \
+                        --ignore-unfixed \
+                        --scanners vuln \
                         --format json \
                         --output /reports/trivy-backend-report.json \
-                        ${BACKEND_ECR_REPO}:${IMAGE_TAG} || true
+                        ${BACKEND_ECR_REPO}:${IMAGE_TAG}
+                    TRIVY_BACKEND_EXIT=$?
+                    set -e
 
                     echo "--- Scanning frontend image ---"
+                    set +e
                     docker run --rm \
                         -v /var/run/docker.sock:/var/run/docker.sock \
                         -v ${WORKSPACE}/${REPORTS_DIR}:/reports \
+                        -v ${WORKSPACE}/.trivy-cache:/root/.cache/trivy \
                         aquasec/trivy:latest image \
                         --exit-code 1 \
                         --severity HIGH,CRITICAL \
+                        --ignore-unfixed \
+                        --scanners vuln \
                         --format json \
                         --output /reports/trivy-frontend-report.json \
-                        ${FRONTEND_ECR_REPO}:${IMAGE_TAG} || true
+                        ${FRONTEND_ECR_REPO}:${IMAGE_TAG}
+                    TRIVY_FRONTEND_EXIT=$?
+                    set -e
+
+                    # Print finding counts before failing
+                    for img_name in backend frontend; do
+                        report="${REPORTS_DIR}/trivy-${img_name}-report.json"
+                        if [ -f "$report" ]; then
+                            COUNT=$(python3 -c "import json; d=json.load(open('$report')); print(sum(len(r.get('Vulnerabilities') or []) for r in d.get('Results',[])))" 2>/dev/null || echo '?')
+                            echo "[$img_name] HIGH/CRITICAL (with fix available): $COUNT"
+                        fi
+                    done
+
+                    if [ $TRIVY_BACKEND_EXIT -ne 0 ] || [ $TRIVY_FRONTEND_EXIT -ne 0 ]; then
+                        echo "❌ Trivy found HIGH/CRITICAL fixable vulnerabilities — blocking pipeline"
+                        exit 1
+                    fi
+                    echo "✅ No HIGH/CRITICAL fixable vulnerabilities found in either image"
                 '''
                 echo '✅ Image scan complete'
             }
