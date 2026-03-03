@@ -450,6 +450,49 @@ except Exception as e:
                 echo '=== Deploying to ECS Fargate ==='
                 script {
                     sh '''
+                        # ── Pre-flight 1: verify all SSM parameters exist ──────
+                        # ECS fails with ResourceInitializationError before the
+                        # container even starts if any valueFrom SSM path is missing.
+                        echo "--- Pre-flight: verifying SSM parameters ---"
+                        MISSING=0
+                        for param in \
+                            "/${PROJECT_NAME}/${ENVIRONMENT}/app/db_host" \
+                            "/${PROJECT_NAME}/${ENVIRONMENT}/db/name" \
+                            "/${PROJECT_NAME}/${ENVIRONMENT}/db/user" \
+                            "/${PROJECT_NAME}/${ENVIRONMENT}/db/password"; do
+                            set +e
+                            aws ssm get-parameter --name "$param" \
+                                --region ${AWS_REGION} \
+                                --query 'Parameter.Name' \
+                                --output text > /dev/null 2>&1
+                            if [ $? -ne 0 ]; then
+                                echo "  ❌ MISSING: $param"
+                                MISSING=$((MISSING + 1))
+                            else
+                                echo "  ✅ $param"
+                            fi
+                            set -e
+                        done
+                        if [ $MISSING -gt 0 ]; then
+                            echo "❌ $MISSING SSM parameter(s) missing — ECS will fail ResourceInitializationError"
+                            exit 1
+                        fi
+
+                        # ── Pre-flight 2: verify ECR images exist at this tag ──
+                        echo "--- Pre-flight: verifying ECR images (tag: ${IMAGE_TAG}) ---"
+                        aws ecr describe-images \
+                            --repository-name monitor-spendwise-backend \
+                            --image-ids imageTag=${IMAGE_TAG} \
+                            --region ${AWS_REGION} > /dev/null
+                        echo "  ✅ backend:${IMAGE_TAG}"
+
+                        aws ecr describe-images \
+                            --repository-name monitor-spendwise-frontend \
+                            --image-ids imageTag=${IMAGE_TAG} \
+                            --region ${AWS_REGION} > /dev/null
+                        echo "  ✅ frontend:${IMAGE_TAG}"
+
+                        # ── Fetch and patch task definition ──────────────────────
                         echo "--- Fetching current task definition ---"
                         aws ecs describe-task-definition \
                             --task-definition ${TASK_FAMILY} \
@@ -470,15 +513,23 @@ for container in td['containerDefinitions']:
     if container['name'] == 'spendwise-frontend':
         container['image'] = '${FRONTEND_ECR_REPO}:${IMAGE_TAG}'
 
-# Remove fields AWS does not accept on registration
-for key in ['taskDefinitionArn', 'revision', 'status', 'requiresAttributes',
-            'compatibilities', 'registeredAt', 'registeredBy']:
+# Strip all fields AWS rejects when re-registering a task definition.
+# registeredAt/registeredBy/deregisteredAt are timestamps/principals set by AWS.
+# enableFaultInjection is not accepted in all regions.
+for key in [
+    'taskDefinitionArn', 'revision', 'status',
+    'requiresAttributes', 'compatibilities',
+    'registeredAt', 'registeredBy',
+    'deregisteredAt', 'enableFaultInjection',
+]:
     td.pop(key, None)
 
 with open('new-task-def.json', 'w') as f:
-    json.dump(td, f)
+    json.dump(td, f, indent=2)
 
-print('Task definition updated successfully')
+print('Task definition updated:')
+print(f'  backend  → {[c[\"image\"] for c in td["containerDefinitions"] if c["name"]=="spendwise-backend"][0]}')
+print(f'  frontend → {[c[\"image\"] for c in td["containerDefinitions"] if c["name"]=="spendwise-frontend"][0]}')
 "
 
                         echo "--- Registering new task definition revision ---"
@@ -487,7 +538,6 @@ print('Task definition updated successfully')
                             --cli-input-json file://new-task-def.json \
                             --query 'taskDefinition.revision' \
                             --output text)
-
                         echo "Registered revision: $NEW_REVISION"
 
                         echo "--- Updating ECS service ---"
@@ -498,14 +548,57 @@ print('Task definition updated successfully')
                             --task-definition ${TASK_FAMILY}:$NEW_REVISION \
                             --force-new-deployment
 
-                        echo "--- Saving task definition as artifact ---"
                         cp new-task-def.json ${REPORTS_DIR}/task-definition-rendered.json
-
                         echo "✅ ECS service updated to revision $NEW_REVISION"
                     '''
                 }
             }
             post {
+                failure {
+                    // Print exactly why the task failed — stop reason, exit code,
+                    // last log lines from CloudWatch, and ECS service events.
+                    sh '''
+                        echo "=== ECS FAILURE DIAGNOSIS ==="
+
+                        echo "--- Most recently stopped task ---"
+                        STOPPED=$(aws ecs list-tasks \
+                            --cluster ${ECS_CLUSTER} \
+                            --region ${AWS_REGION} \
+                            --desired-status STOPPED \
+                            --query 'taskArns[0]' \
+                            --output text 2>/dev/null || echo "")
+
+                        if [ -n "$STOPPED" ] && [ "$STOPPED" != "None" ]; then
+                            aws ecs describe-tasks \
+                                --cluster ${ECS_CLUSTER} \
+                                --tasks $STOPPED \
+                                --region ${AWS_REGION} \
+                                --no-cli-pager \
+                                --query 'tasks[0].{StopCode:stopCode,StopReason:stoppedReason,Containers:containers[*].{Name:name,ExitCode:exitCode,Reason:reason}}' \
+                                --output json || true
+
+                            TASK_ID=$(echo $STOPPED | rev | cut -d'/' -f1 | rev)
+                            echo "--- Last 30 backend log lines ---"
+                            aws logs get-log-events \
+                                --log-group-name /ecs/${PROJECT_NAME}-${ENVIRONMENT} \
+                                --log-stream-name "backend/spendwise-backend/${TASK_ID}" \
+                                --region ${AWS_REGION} \
+                                --limit 30 \
+                                --no-cli-pager \
+                                --query 'events[*].message' \
+                                --output text 2>/dev/null || echo "(no CloudWatch logs found for this task)"
+                        fi
+
+                        echo "--- Last 5 ECS service events ---"
+                        aws ecs describe-services \
+                            --cluster ${ECS_CLUSTER} \
+                            --services ${ECS_SERVICE} \
+                            --region ${AWS_REGION} \
+                            --no-cli-pager \
+                            --query 'services[0].events[:5].[message]' \
+                            --output text || true
+                    '''
+                }
                 always {
                     archiveArtifacts artifacts: 'security-reports/task-definition-rendered.json',
                                      allowEmptyArchive: true
