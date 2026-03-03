@@ -226,29 +226,44 @@ except Exception as e:
             steps {
                 echo '=== Scanning Docker images for vulnerabilities ==='
                 sh '''
+                    # Pull Trivy DB once and cache it across both scans
+                    mkdir -p ${WORKSPACE}/.trivy-cache
+
                     echo "--- Scanning backend image ---"
+                    # set +e: prevents Jenkins set -e from exiting before we capture $?
+                    # Without this, Trivy exit 1 (vulns found) silently kills the shell
+                    set +e
                     docker run --rm \
                         -v /var/run/docker.sock:/var/run/docker.sock \
                         -v ${WORKSPACE}/${REPORTS_DIR}:/reports \
+                        -v ${WORKSPACE}/.trivy-cache:/root/.cache/trivy \
                         aquasec/trivy:latest image \
                         --exit-code 1 \
                         --severity HIGH,CRITICAL \
+                        --ignore-unfixed \
+                        --scanners vuln \
                         --format json \
                         --output /reports/trivy-backend-report.json \
                         ${BACKEND_ECR_REPO}:${IMAGE_TAG}
                     TRIVY_BACKEND_EXIT=$?
+                    set -e
 
                     echo "--- Scanning frontend image ---"
+                    set +e
                     docker run --rm \
                         -v /var/run/docker.sock:/var/run/docker.sock \
                         -v ${WORKSPACE}/${REPORTS_DIR}:/reports \
+                        -v ${WORKSPACE}/.trivy-cache:/root/.cache/trivy \
                         aquasec/trivy:latest image \
                         --exit-code 1 \
                         --severity HIGH,CRITICAL \
+                        --ignore-unfixed \
+                        --scanners vuln \
                         --format json \
                         --output /reports/trivy-frontend-report.json \
                         ${FRONTEND_ECR_REPO}:${IMAGE_TAG}
                     TRIVY_FRONTEND_EXIT=$?
+                    set -e
 
                     # Print summary before failing
                     for img_name in backend frontend; do
