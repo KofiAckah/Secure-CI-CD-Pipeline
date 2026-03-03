@@ -528,8 +528,10 @@ with open('new-task-def.json', 'w') as f:
     json.dump(td, f, indent=2)
 
 print('Task definition updated:')
-print(f'  backend  → {[c[\"image\"] for c in td["containerDefinitions"] if c["name"]=="spendwise-backend"][0]}')
-print(f'  frontend → {[c[\"image\"] for c in td["containerDefinitions"] if c["name"]=="spendwise-frontend"][0]}')
+be = next((c['image'] for c in td['containerDefinitions'] if c['name']=='spendwise-backend'), 'NOT FOUND')
+fe = next((c['image'] for c in td['containerDefinitions'] if c['name']=='spendwise-frontend'), 'NOT FOUND')
+print('  backend  -> ' + be)
+print('  frontend -> ' + fe)
 "
 
                         echo "--- Registering new task definition revision ---"
